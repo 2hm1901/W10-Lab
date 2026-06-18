@@ -32,7 +32,9 @@ curl -fsSL -o /tmp/docker-static.tgz \
   https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz
 tar -xzf /tmp/docker-static.tgz -C /tmp docker/docker
 install /tmp/docker/docker /usr/local/bin/docker
-docker --version
+install /tmp/docker/docker /usr/bin/docker
+/usr/local/bin/docker --version
+/usr/bin/docker --version
 
 # Cài kubectl đúng version Kubernetes mà Minikube sẽ tạo.
 curl -fsSL -o /usr/local/bin/kubectl \
@@ -77,7 +79,7 @@ chown -R ec2-user:ec2-user "$APP_DIR"
 # Build the API image inside Minikube's Docker daemon so Rollout pods can use it
 # without depending on an external registry.
 sudo -u ec2-user -H bash -lc \
-  "eval \"\$(minikube -p w10 docker-env)\" && /usr/local/bin/docker build -t w10-api:local '$APP_DIR/src/api'"
+  "eval \"\$(minikube -p w10 docker-env)\" && hash -r && command -v docker && docker --version && docker build -t w10-api:local '$APP_DIR/src/api'"
 
 # The upstream lab manifests are GitOps-oriented and may point to a template repo
 # or a prebuilt GHCR image. Patch only the EC2 bootstrap copy so the lab can run
