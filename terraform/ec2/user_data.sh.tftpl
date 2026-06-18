@@ -32,7 +32,7 @@ curl -fsSL -o /tmp/docker-static.tgz \
   https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz
 tar -xzf /tmp/docker-static.tgz -C /tmp docker/docker
 install /tmp/docker/docker /usr/local/bin/docker
-docker version --client
+docker --version
 
 # Cài kubectl đúng version Kubernetes mà Minikube sẽ tạo.
 curl -fsSL -o /usr/local/bin/kubectl \
