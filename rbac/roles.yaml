@@ -1,0 +1,58 @@
+# RBAC roles for W10 lab users.
+#
+# alice: developer in namespace demo only.
+# bob: SRE with pod operations across the whole cluster.
+# carol: cluster-wide read-only viewer.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+  namespace: demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["argoproj.io"]
+  resources: ["rollouts"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/exec", "pods/portforward"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events", "namespaces"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: viewer
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rbac-self-check
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["selfsubjectaccessreviews"]
+  verbs: ["create"]

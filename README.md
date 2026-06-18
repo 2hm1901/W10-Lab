@@ -24,6 +24,7 @@ ngay trên EC2.
 - `app-alert`: PrometheusRule và mẫu secret email cho AlertManager.
 - `app-common`: Namespace dùng chung cho workload demo.
 - `argocd`: App-of-Apps và các ArgoCD Application.
+- `rbac`: Role, ClusterRole và binding cho user `alice`, `bob`, `carol`.
 - `terraform/ec2`: Terraform tạo EC2, SSH key pair, security group và bootstrap lab.
 
 ## Cấu trúc repo
@@ -45,6 +46,10 @@ W10/
 ├── argocd/
 │   ├── apps/
 │   └── root.yaml
+├── rbac/
+│   ├── roles.yaml
+│   ├── rolebindings.yaml
+│   └── README.md
 ├── src/api/
 │   ├── app.py
 │   └── Dockerfile
@@ -186,7 +191,8 @@ kubectl get applications -n argocd
 
 Vì sao làm bước này: `argocd/root.yaml` tạo root Application. Root app này trỏ
 tới thư mục `argocd/apps`, sau đó ArgoCD sẽ tạo các child apps như `api`,
-`analysis`, `alert`, `common`, `argo-rollouts` và `kube-prometheus-stack`.
+`analysis`, `alert`, `common`, `rbac`, `argo-rollouts` và
+`kube-prometheus-stack`.
 Nếu chưa apply root app thì ArgoCD UI chỉ có server rỗng, không có Application.
 
 Lưu ý: EC2 bootstrap đã patch và apply bản manifest local để dùng image
@@ -273,6 +279,52 @@ cat /home/ec2-user/w10-lab-info.txt
 ```
 
 File này nhắc lại các lệnh kiểm tra thường dùng và danh sách port đang expose.
+
+## Test RBAC
+
+RBAC lab tạo 3 user giả lập để kiểm tra bằng `kubectl auth can-i --as=<user>`:
+
+| User | Vai trò | Quyền |
+| --- | --- | --- |
+| `alice` | developer | CRUD workload trong namespace `demo` |
+| `bob` | sre | Xem và thao tác pod toàn cụm |
+| `carol` | viewer | Chỉ đọc toàn cụm |
+
+Nếu đã apply root app, ArgoCD sẽ sync app `rbac`. Kiểm tra:
+
+```bash
+kubectl get application rbac -n argocd
+kubectl get role,rolebinding -n demo
+kubectl get clusterrole,clusterrolebinding | grep -E 'sre|viewer|rbac-self-check|bob|carol'
+```
+
+Nếu muốn apply thủ công trên EC2:
+
+```bash
+kubectl apply -f /opt/w10/rbac/
+```
+
+Test phân quyền:
+
+```bash
+kubectl auth can-i create deployments -n demo --as=alice
+kubectl auth can-i create deployments -n default --as=alice
+kubectl auth can-i delete pods -A --as=bob
+kubectl auth can-i get pods -A --as=carol
+kubectl auth can-i delete pods -A --as=carol
+```
+
+Kỳ vọng:
+
+```text
+yes
+no
+yes
+yes
+no
+```
+
+Chi tiết nằm trong `rbac/README.md`.
 
 ## Chạy local bằng Minikube
 
