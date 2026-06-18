@@ -401,7 +401,7 @@ Chuẩn bị AWS secret:
 
 ```bash
 aws secretsmanager create-secret \
-  --region ap-southeast-1 \
+  --region ap-southeast-2 \
   --name w10/db-password \
   --secret-string '{"password":"initial-db-password"}'
 ```
@@ -430,7 +430,7 @@ Rotate secret trên AWS:
 
 ```bash
 aws secretsmanager put-secret-value \
-  --region ap-southeast-1 \
+  --region ap-southeast-2 \
   --secret-id w10/db-password \
   --secret-string '{"password":"rotated-db-password"}'
 ```

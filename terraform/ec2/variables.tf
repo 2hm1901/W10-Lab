@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region where the EC2 instance will be created."
   type        = string
-  default     = "ap-southeast-1"
+  default     = "ap-southeast-2"
 }
 
 variable "project_name" {

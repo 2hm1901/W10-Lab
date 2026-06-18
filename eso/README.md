@@ -20,7 +20,7 @@ Chạy trên máy có AWS CLI hoặc trên EC2 nếu AWS CLI đã cấu hình:
 
 ```bash
 aws secretsmanager create-secret \
-  --region ap-southeast-1 \
+  --region ap-southeast-2 \
   --name w10/db-password \
   --secret-string '{"password":"initial-db-password"}'
 ```
@@ -29,7 +29,7 @@ Nếu secret đã tồn tại:
 
 ```bash
 aws secretsmanager put-secret-value \
-  --region ap-southeast-1 \
+  --region ap-southeast-2 \
   --secret-id w10/db-password \
   --secret-string '{"password":"initial-db-password"}'
 ```
@@ -58,7 +58,7 @@ IAM user/access key cần tối thiểu quyền đọc secret:
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ],
-      "Resource": "arn:aws:secretsmanager:ap-southeast-1:*:secret:w10/db-password-*"
+      "Resource": "arn:aws:secretsmanager:ap-southeast-2:*:secret:w10/db-password-*"
     }
   ]
 }
@@ -100,7 +100,7 @@ Kỳ vọng log in ra:
 
 ```bash
 aws secretsmanager put-secret-value \
-  --region ap-southeast-1 \
+  --region ap-southeast-2 \
   --secret-id w10/db-password \
   --secret-string '{"password":"rotated-db-password"}'
 ```

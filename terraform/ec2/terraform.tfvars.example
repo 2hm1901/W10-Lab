@@ -1,4 +1,4 @@
-aws_region       = "ap-southeast-1"
+aws_region       = "ap-southeast-2"
 project_name     = "w10"
 instance_type    = "t3.large"
 root_volume_size = 50
