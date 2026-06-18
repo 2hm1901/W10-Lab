@@ -79,7 +79,7 @@ chown -R ec2-user:ec2-user "$APP_DIR"
 # Build the API image inside Minikube's Docker daemon so Rollout pods can use it
 # without depending on an external registry.
 sudo -u ec2-user -H bash -lc \
-  "eval \"\$(minikube -p w10 docker-env)\" && hash -r && command -v docker && docker --version && docker build -t w10-api:local '$APP_DIR/src/api'"
+  "eval \"\$(minikube -p w10 docker-env)\" && unset DOCKER_API_VERSION && hash -r && command -v docker && docker --version && docker version && docker build -t w10-api:local '$APP_DIR/src/api'"
 
 # The upstream lab manifests are GitOps-oriented and may point to a template repo
 # or a prebuilt GHCR image. Patch only the EC2 bootstrap copy so the lab can run
