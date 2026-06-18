@@ -1,0 +1,189 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowedimagetags
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowedImageTags
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            tags:
+              type: array
+              items:
+                type: string
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8sdisallowedimagetags
+
+      violation[{"msg": msg}] {
+        tag := input.parameters.tags[_]
+        container := containers[_]
+        endswith(container.image, sprintf(":%s", [tag]))
+        msg := sprintf("container <%s> uses disallowed image tag <%s>", [container.name, tag])
+      }
+
+      pod_spec := input.review.object.spec {
+        input.review.kind.kind == "Pod"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Deployment"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Rollout"
+      }
+
+      containers[c] {
+        c := pod_spec.containers[_]
+      }
+
+      containers[c] {
+        c := pod_spec.initContainers[_]
+      }
+---
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlimits
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLimits
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            limits:
+              type: array
+              items:
+                type: string
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8srequiredlimits
+
+      violation[{"msg": msg}] {
+        resource := input.parameters.limits[_]
+        container := containers[_]
+        not container.resources.limits[resource]
+        msg := sprintf("container <%s> must set resources.limits.%s", [container.name, resource])
+      }
+
+      pod_spec := input.review.object.spec {
+        input.review.kind.kind == "Pod"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Deployment"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Rollout"
+      }
+
+      containers[c] {
+        c := pod_spec.containers[_]
+      }
+
+      containers[c] {
+        c := pod_spec.initContainers[_]
+      }
+---
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowrunasroot
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowRunAsRoot
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8sdisallowrunasroot
+
+      violation[{"msg": msg}] {
+        pod_spec.securityContext.runAsUser == 0
+        msg := "pod securityContext.runAsUser must not be 0"
+      }
+
+      violation[{"msg": msg}] {
+        container := containers[_]
+        container.securityContext.runAsUser == 0
+        msg := sprintf("container <%s> securityContext.runAsUser must not be 0", [container.name])
+      }
+
+      pod_spec := input.review.object.spec {
+        input.review.kind.kind == "Pod"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Deployment"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Rollout"
+      }
+
+      containers[c] {
+        c := pod_spec.containers[_]
+      }
+
+      containers[c] {
+        c := pod_spec.initContainers[_]
+      }
+---
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowhostnetwork
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowHostNetwork
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8sdisallowhostnetwork
+
+      violation[{"msg": msg}] {
+        pod_spec.hostNetwork == true
+        msg := "hostNetwork must not be true"
+      }
+
+      pod_spec := input.review.object.spec {
+        input.review.kind.kind == "Pod"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Deployment"
+      }
+
+      pod_spec := input.review.object.spec.template.spec {
+        input.review.kind.kind == "Rollout"
+      }

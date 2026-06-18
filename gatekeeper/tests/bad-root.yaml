@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-bad-root
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gatekeeper-bad-root
+  template:
+    metadata:
+      labels:
+        app: gatekeeper-bad-root
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27.3
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          runAsUser: 0

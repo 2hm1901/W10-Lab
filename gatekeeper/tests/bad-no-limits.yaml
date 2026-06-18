@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-bad-no-limits
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gatekeeper-bad-no-limits
+  template:
+    metadata:
+      labels:
+        app: gatekeeper-bad-no-limits
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27.3

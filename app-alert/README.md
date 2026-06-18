@@ -113,7 +113,7 @@ Tạo một ít traffic để API có metric:
 
 ```bash
 for i in $(seq 1 100); do
-  kubectl -n demo run curl-api-$i --image=curlimages/curl:latest --rm -i --restart=Never -- \
+  kubectl -n monitoring run curl-api-$i --image=curlimages/curl:8.10.1 --rm -i --restart=Never -- \
     curl -s http://api.demo.svc.cluster.local/ >/dev/null || true
 done
 ```
@@ -121,7 +121,7 @@ done
 Query Prometheus success rate:
 
 ```bash
-kubectl run prom-query --image=curlimages/curl:latest --rm -i --restart=Never -n monitoring -- \
+kubectl run prom-query --image=curlimages/curl:8.10.1 --rm -i --restart=Never -n monitoring -- \
   curl -s 'http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query?query=api:success_rate:5m'
 ```
 
@@ -158,7 +158,7 @@ Tạo traffic liên tục trong 3-5 phút để metric đủ dữ liệu:
 
 ```bash
 while true; do
-  kubectl -n demo run curl-api-$(date +%s%N) --image=curlimages/curl:latest --rm -i --restart=Never -- \
+  kubectl -n monitoring run curl-api-$(date +%s%N) --image=curlimages/curl:8.10.1 --rm -i --restart=Never -- \
     curl -s http://api.demo.svc.cluster.local/ >/dev/null || true
   sleep 1
 done
@@ -177,7 +177,7 @@ kubectl get prometheusrule slo-alerts -n monitoring
 Query alert trong Prometheus:
 
 ```bash
-kubectl run prom-alert-query --image=curlimages/curl:latest --rm -i --restart=Never -n monitoring -- \
+kubectl run prom-alert-query --image=curlimages/curl:8.10.1 --rm -i --restart=Never -n monitoring -- \
   curl -s 'http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query?query=ALERTS%7Balertname%3D%22SLOViolation%22%7D'
 ```
 

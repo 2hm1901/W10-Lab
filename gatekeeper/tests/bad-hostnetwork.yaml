@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-bad-hostnetwork
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gatekeeper-bad-hostnetwork
+  template:
+    metadata:
+      labels:
+        app: gatekeeper-bad-hostnetwork
+    spec:
+      hostNetwork: true
+      containers:
+      - name: app
+        image: nginx:1.27.3
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
