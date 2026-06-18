@@ -1,6 +1,6 @@
 # Gatekeeper Guide
 
-Lab này cài OPA Gatekeeper qua GitOps và enforce 4 luật admission trong namespace
+Lab này cài OPA Gatekeeper qua GitOps và enforce 5 luật admission trong namespace
 `demo`.
 
 | # | Luật | Risk |
@@ -9,6 +9,7 @@ Lab này cài OPA Gatekeeper qua GitOps và enforce 4 luật admission trong nam
 | 2 | Bắt buộc có `resources.limits.cpu` và `resources.limits.memory` | F-02 |
 | 3 | Cấm `runAsUser: 0` | F-04 |
 | 4 | Cấm `hostNetwork: true` | - |
+| 5 | Cấm `Deployment.spec.replicas > 5` | - |
 
 ## Deploy qua ArgoCD
 
@@ -38,6 +39,7 @@ kubectl get k8sdisallowedimagetags
 kubectl get k8srequiredlimits
 kubectl get k8sdisallowrunasroot
 kubectl get k8sdisallowhostnetwork
+kubectl get k8smaxreplicas
 ```
 
 ## Test admission
@@ -49,6 +51,8 @@ Manifest hợp lệ phải được API server nhận:
 ```bash
 kubectl apply -f /opt/w10/gatekeeper/tests/good-deployment.yaml
 kubectl delete -f /opt/w10/gatekeeper/tests/good-deployment.yaml
+kubectl apply -f /opt/w10/gatekeeper/tests/good-replicas.yaml
+kubectl delete -f /opt/w10/gatekeeper/tests/good-replicas.yaml
 ```
 
 Các manifest vi phạm phải bị từ chối:
@@ -58,6 +62,7 @@ kubectl apply -f /opt/w10/gatekeeper/tests/bad-latest.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-no-limits.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-root.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-hostnetwork.yaml
+kubectl apply -f /opt/w10/gatekeeper/tests/bad-replicas.yaml
 ```
 
 Kỳ vọng:
@@ -66,6 +71,7 @@ Kỳ vọng:
 - `bad-no-limits.yaml`: bị chặn vì thiếu `resources.limits`.
 - `bad-root.yaml`: bị chặn vì `runAsUser: 0`.
 - `bad-hostnetwork.yaml`: bị chặn vì `hostNetwork: true`.
+- `bad-replicas.yaml`: bị chặn vì `Deployment.spec.replicas` là `6`, lớn hơn `5`.
 
 ## Lưu ý với lab hiện tại
 

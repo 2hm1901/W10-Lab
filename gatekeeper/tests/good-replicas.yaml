@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-good-replicas
+  namespace: demo
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: gatekeeper-good-replicas
+  template:
+    metadata:
+      labels:
+        app: gatekeeper-good-replicas
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27.3
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          runAsUser: 101

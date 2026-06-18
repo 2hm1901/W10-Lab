@@ -73,3 +73,19 @@ spec:
       kinds: ["Deployment"]
     - apiGroups: ["argoproj.io"]
       kinds: ["Rollout"]
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sMaxReplicas
+metadata:
+  name: max-deployment-replicas
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    namespaces: ["demo"]
+    kinds:
+    - apiGroups: ["apps"]
+      kinds: ["Deployment"]
+  parameters:
+    maxReplicas: 5

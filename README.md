@@ -333,7 +333,7 @@ Chi tiết nằm trong `rbac/README.md`.
 
 ## Test Gatekeeper
 
-Gatekeeper lab enforce 4 luật trong namespace `demo`:
+Gatekeeper lab enforce 5 luật trong namespace `demo`:
 
 | Luật | Ý nghĩa |
 | --- | --- |
@@ -341,6 +341,7 @@ Gatekeeper lab enforce 4 luật trong namespace `demo`:
 | Bắt buộc `resources.limits` | Container phải có CPU/memory limit |
 | Cấm `runAsUser: 0` | Không chạy container bằng root user |
 | Cấm `hostNetwork: true` | Không dùng host network |
+| Cấm `Deployment.spec.replicas > 5` | Không cho Deployment scale quá 5 replicas |
 
 Nếu đã apply root app, ArgoCD sẽ sync 2 app:
 
@@ -354,7 +355,7 @@ Kiểm tra controller và constraints:
 ```bash
 kubectl get pods -n gatekeeper-system
 kubectl get constrainttemplates
-kubectl get k8sdisallowedimagetags,k8srequiredlimits,k8sdisallowrunasroot,k8sdisallowhostnetwork
+kubectl get k8sdisallowedimagetags,k8srequiredlimits,k8sdisallowrunasroot,k8sdisallowhostnetwork,k8smaxreplicas
 ```
 
 Test manifest hợp lệ:
@@ -362,6 +363,8 @@ Test manifest hợp lệ:
 ```bash
 kubectl apply -f /opt/w10/gatekeeper/tests/good-deployment.yaml
 kubectl delete -f /opt/w10/gatekeeper/tests/good-deployment.yaml
+kubectl apply -f /opt/w10/gatekeeper/tests/good-replicas.yaml
+kubectl delete -f /opt/w10/gatekeeper/tests/good-replicas.yaml
 ```
 
 Test manifest xấu, các lệnh dưới đây phải bị API server từ chối:
@@ -371,6 +374,7 @@ kubectl apply -f /opt/w10/gatekeeper/tests/bad-latest.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-no-limits.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-root.yaml
 kubectl apply -f /opt/w10/gatekeeper/tests/bad-hostnetwork.yaml
+kubectl apply -f /opt/w10/gatekeeper/tests/bad-replicas.yaml
 ```
 
 Chi tiết nằm trong `gatekeeper/README.md`.
