@@ -48,3 +48,19 @@ output "private_key_path" {
   value       = local.private_key_path
   sensitive   = true
 }
+
+output "eso_secret_arn" {
+  description = "ARN of the AWS Secrets Manager secret used by the ESO lab."
+  value       = try(aws_secretsmanager_secret.eso_db_password[0].arn, null)
+}
+
+output "eso_iam_user_name" {
+  description = "IAM user created for ESO to read the lab secret."
+  value       = try(aws_iam_user.eso[0].name, null)
+}
+
+output "eso_credentials_script" {
+  description = "Local script that SSHs to EC2 and creates the Kubernetes aws-credentials secret for ESO."
+  value       = var.create_eso_aws_resources ? local.eso_credentials_script_path : null
+  sensitive   = true
+}

@@ -1,7 +1,10 @@
 locals {
   # Prefix dùng chung để đặt tên resource AWS và file key local.
-  name_prefix      = var.project_name
-  private_key_path = "${path.module}/generated/${var.project_name}.pem"
+  name_prefix                     = var.project_name
+  private_key_path                = "${path.module}/generated/${var.project_name}.pem"
+  eso_iam_user_name               = coalesce(var.eso_iam_user_name, "${var.project_name}-eso")
+  eso_credentials_script_path     = "${path.module}/generated/${var.project_name}-eso-credentials.sh"
+  eso_initial_secret_string_value = jsonencode({ password = var.eso_initial_db_password })
 
   # Tag tối thiểu giúp nhận diện resource do Terraform quản lý.
   common_tags = {

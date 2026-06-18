@@ -24,3 +24,7 @@ api_port          = 8081
 prometheus_port   = 9090
 grafana_port      = 3000
 alertmanager_port = 9093
+
+create_eso_aws_resources = true
+eso_secret_name           = "w10/db-password"
+eso_initial_db_password   = "initial-db-password"

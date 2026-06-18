@@ -397,18 +397,23 @@ AWS Secrets Manager w10/db-password
   -> Deployment/demo/secret-reader
 ```
 
-Chuẩn bị AWS secret:
+Terraform trong `terraform/ec2` có thể tạo sẵn Secrets Manager secret và IAM
+access key cho ESO. Sau khi chạy `terraform apply`, tạo Kubernetes secret chứa
+AWS credentials bằng script generated:
+
+```bash
+cd terraform/ec2
+./generated/w10-eso-credentials.sh
+```
+
+Nếu bạn không dùng Terraform cho phần AWS secret/IAM, có thể tạo thủ công:
 
 ```bash
 aws secretsmanager create-secret \
   --region ap-southeast-2 \
   --name w10/db-password \
   --secret-string '{"password":"initial-db-password"}'
-```
 
-Tạo AWS credentials trong cluster, không commit vào Git:
-
-```bash
 kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic aws-credentials -n external-secrets \

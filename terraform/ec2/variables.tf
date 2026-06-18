@@ -129,3 +129,28 @@ variable "argo_rollouts_plugin_version" {
   type        = string
   default     = "1.7.2"
 }
+
+variable "create_eso_aws_resources" {
+  description = "Create AWS Secrets Manager secret and IAM access key for External Secrets Operator."
+  type        = bool
+  default     = true
+}
+
+variable "eso_secret_name" {
+  description = "AWS Secrets Manager secret name used by the ESO lab."
+  type        = string
+  default     = "w10/db-password"
+}
+
+variable "eso_initial_db_password" {
+  description = "Initial password value stored in AWS Secrets Manager for the ESO lab."
+  type        = string
+  sensitive   = true
+  default     = "initial-db-password"
+}
+
+variable "eso_iam_user_name" {
+  description = "Optional IAM user name for ESO. If null, project_name-eso is used."
+  type        = string
+  default     = null
+}
