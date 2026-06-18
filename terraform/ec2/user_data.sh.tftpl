@@ -13,7 +13,11 @@ REPOSITORY_URL="${repository_url}"
 
 # Cài dependency hệ thống cần cho Docker, Minikube và kubectl port-forward.
 dnf update -y
-dnf install -y curl git docker tar gzip jq conntrack-tools socat iptables
+dnf install -y git docker tar gzip jq conntrack-tools socat iptables
+
+# Amazon Linux 2023 thường cài sẵn curl-minimal. Package này đã có binary curl;
+# không cài thêm package curl đầy đủ để tránh conflict curl-minimal/curl.
+command -v curl >/dev/null
 
 # Docker là driver của Minikube và cũng là nơi build image local cho API.
 systemctl enable --now docker
