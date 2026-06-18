@@ -1,40 +1,50 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ghi toàn bộ output bootstrap để debug khi EC2 khởi tạo lỗi hoặc chart cài lâu.
 exec > >(tee -a /var/log/w10-bootstrap.log) 2>&1
 
+# Các biến này được Terraform render từ variables.tf.
 APP_DIR="/opt/w10"
 APP_VERSION="${app_version}"
 ERROR_RATE="${error_rate}"
 REPOSITORY_BRANCH="${repository_branch}"
 REPOSITORY_URL="${repository_url}"
 
+# Cài dependency hệ thống cần cho Docker, Minikube và kubectl port-forward.
 dnf update -y
 dnf install -y curl git docker tar gzip jq conntrack-tools socat iptables
 
+# Docker là driver của Minikube và cũng là nơi build image local cho API.
 systemctl enable --now docker
 usermod -aG docker ec2-user
 
 install -d -m 0755 /usr/local/bin
 
+# Cài kubectl đúng version Kubernetes mà Minikube sẽ tạo.
 curl -fsSL -o /usr/local/bin/kubectl \
   "https://dl.k8s.io/release/${kubernetes_version}/bin/linux/amd64/kubectl"
 chmod +x /usr/local/bin/kubectl
 
+# Cài Minikube để chạy cluster Kubernetes single-node ngay trên EC2.
 curl -fsSL -o /tmp/minikube-linux-amd64 \
   https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
 
+# Helm dùng để cài Argo Rollouts và kube-prometheus-stack.
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
+# ArgoCD CLI tiện cho thao tác thủ công sau khi lab chạy.
 curl -fsSL -o /usr/local/bin/argocd \
   https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
 chmod +x /usr/local/bin/argocd
 
+# Plugin này cho phép chạy "kubectl argo rollouts ..." để quan sát canary.
 curl -fsSL -o /usr/local/bin/kubectl-argo-rollouts \
   "https://github.com/argoproj/argo-rollouts/releases/download/v${argo_rollouts_plugin_version}/kubectl-argo-rollouts-linux-amd64"
 chmod +x /usr/local/bin/kubectl-argo-rollouts
 
+# Tạo cluster Minikube dưới user ec2-user để kubeconfig nằm ở /home/ec2-user.
 sudo -u ec2-user -H minikube start \
   -p w10 \
   --driver=docker \
@@ -46,6 +56,7 @@ sudo -u ec2-user -H minikube start \
 
 sudo -u ec2-user -H kubectl config use-context w10
 
+# Clone repo lab vào EC2 để build image và apply manifest.
 rm -rf "$APP_DIR"
 git clone --branch "$REPOSITORY_BRANCH" --depth 1 "$REPOSITORY_URL" "$APP_DIR"
 chown -R ec2-user:ec2-user "$APP_DIR"
@@ -63,11 +74,13 @@ sed -i 's|imagePullPolicy: .*|imagePullPolicy: Never|g' "$APP_DIR/app-api/rollou
 sed -i "s|value: \"v.*\"|value: \"$${APP_VERSION}\"|g" "$APP_DIR/app-api/rollout.yaml"
 sed -i "s|value: \"0\"|value: \"$${ERROR_RATE}\"|g" "$APP_DIR/app-api/rollout.yaml"
 
+# Cài ArgoCD theo manifest upstream giống hướng dẫn local của lab.
 sudo -u ec2-user -H kubectl create namespace argocd --dry-run=client -o yaml | sudo -u ec2-user -H kubectl apply -f -
 sudo -u ec2-user -H kubectl apply --server-side -n argocd \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 sudo -u ec2-user -H kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
 
+# Thêm Helm repositories dùng bởi các ArgoCD Application trong repo.
 sudo -u ec2-user -H helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 sudo -u ec2-user -H helm repo add argo https://argoproj.github.io/argo-helm
 sudo -u ec2-user -H helm repo update
@@ -79,6 +92,8 @@ sudo -u ec2-user -H helm upgrade --install argo-rollouts argo/argo-rollouts \
   --wait \
   --timeout 10m
 
+# Values tối thiểu để Prometheus tự nhận ServiceMonitor/PrometheusRule trong
+# namespace demo/monitoring mà không bị giới hạn bởi label mặc định của chart.
 cat >/tmp/kube-prometheus-stack-values.yaml <<'VALUES'
 prometheus:
   prometheusSpec:
@@ -98,6 +113,8 @@ sudo -u ec2-user -H helm upgrade --install kube-prometheus-stack prometheus-comm
   --wait \
   --timeout 15m
 
+# Apply trực tiếp các manifest chính để EC2 sẵn sàng chạy lab ngay sau bootstrap.
+# ArgoCD vẫn được cài để người học quan sát GitOps/App-of-Apps nếu muốn.
 sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-common/demo-namespace.yaml"
 sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-analysis/analysis-template.yaml"
 sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-alert/prometheus-rules.yaml"
@@ -105,6 +122,8 @@ sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-api/"
 
 sudo -u ec2-user -H kubectl -n demo rollout status rollout/api --timeout=10m || true
 
+# Wrapper dùng bởi systemd units để expose các service trong cluster ra public IP
+# của EC2. Trong lab thật nên giới hạn Security Group bằng lab_allowed_cidr.
 cat >/usr/local/bin/w10-port-forward <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
@@ -119,6 +138,7 @@ exec kubectl -n "$NAMESPACE" port-forward --address 0.0.0.0 "$KIND/$NAME" "$LOCA
 SCRIPT
 chmod +x /usr/local/bin/w10-port-forward
 
+# Tạo systemd service tự restart port-forward nếu kết nối bị ngắt.
 create_port_forward_service() {
   local service_name="$1"
   local namespace="$2"
@@ -146,12 +166,15 @@ SERVICE
   systemctl enable --now "$service_name.service"
 }
 
+# Các port-forward mặc định tương ứng với outputs.tf.
 create_port_forward_service w10-argocd-port-forward argocd argocd-server "${argocd_port}" 443
 create_port_forward_service w10-api-port-forward demo api "${api_port}" 80
 create_port_forward_service w10-prometheus-port-forward monitoring kube-prometheus-stack-prometheus "${prometheus_port}" 9090
 create_port_forward_service w10-grafana-port-forward monitoring kube-prometheus-stack-grafana "${grafana_port}" 80
 create_port_forward_service w10-alertmanager-port-forward monitoring kube-prometheus-stack-alertmanager "${alertmanager_port}" 9093
 
+# File hướng dẫn nhanh đặt ngay trong home của ec2-user để người dùng thấy các
+# lệnh kiểm tra quan trọng sau khi SSH vào instance.
 cat >/home/ec2-user/w10-lab-info.txt <<INFO
 W10 lab bootstrap completed.
 
