@@ -26,6 +26,7 @@ ngay trên EC2.
 - `argocd`: App-of-Apps và các ArgoCD Application.
 - `rbac`: Role, ClusterRole và binding cho user `alice`, `bob`, `carol`.
 - `gatekeeper`: OPA Gatekeeper constraints chặn manifest vi phạm admission.
+- `eso`: External Secrets Operator config sync secret từ AWS Secrets Manager.
 - `terraform/ec2`: Terraform tạo EC2, SSH key pair, security group và bootstrap lab.
 
 ## Cấu trúc repo
@@ -54,6 +55,11 @@ W10/
 ├── gatekeeper/
 │   ├── constraints/
 │   ├── tests/
+│   └── README.md
+├── eso/
+│   ├── secret-store.yaml
+│   ├── external-secret.yaml
+│   ├── secret-reader-deployment.yaml
 │   └── README.md
 ├── src/api/
 │   ├── app.py
@@ -197,7 +203,7 @@ kubectl get applications -n argocd
 Vì sao làm bước này: `argocd/root.yaml` tạo root Application. Root app này trỏ
 tới thư mục `argocd/apps`, sau đó ArgoCD sẽ tạo các child apps như `api`,
 `analysis`, `alert`, `common`, `rbac`, `gatekeeper`, `gatekeeper-constraints`,
-`argo-rollouts` và `kube-prometheus-stack`.
+`external-secrets`, `eso-config`, `argo-rollouts` và `kube-prometheus-stack`.
 Nếu chưa apply root app thì ArgoCD UI chỉ có server rỗng, không có Application.
 
 Lưu ý: EC2 bootstrap đã patch và apply bản manifest local để dùng image
@@ -378,6 +384,65 @@ kubectl apply -f /opt/w10/gatekeeper/tests/bad-replicas.yaml
 ```
 
 Chi tiết nằm trong `gatekeeper/README.md`.
+
+## Test External Secrets Operator
+
+ESO lab sync secret từ AWS Secrets Manager về Kubernetes:
+
+```text
+AWS Secrets Manager w10/db-password
+  -> ClusterSecretStore/aws-secrets-manager
+  -> ExternalSecret/demo/api-db-password
+  -> Secret/demo/api-db-secret
+  -> Deployment/demo/secret-reader
+```
+
+Chuẩn bị AWS secret:
+
+```bash
+aws secretsmanager create-secret \
+  --region ap-southeast-1 \
+  --name w10/db-password \
+  --secret-string '{"password":"initial-db-password"}'
+```
+
+Tạo AWS credentials trong cluster, không commit vào Git:
+
+```bash
+kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic aws-credentials -n external-secrets \
+  --from-literal=access-key="$AWS_ACCESS_KEY_ID" \
+  --from-literal=secret-access-key="$AWS_SECRET_ACCESS_KEY"
+```
+
+Sau khi ArgoCD sync root app:
+
+```bash
+kubectl get application external-secrets eso-config -n argocd
+kubectl get pods -n external-secrets
+kubectl get clustersecretstore aws-secrets-manager
+kubectl get externalsecret api-db-password -n demo
+kubectl get secret api-db-secret -n demo
+```
+
+Rotate secret trên AWS:
+
+```bash
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id w10/db-password \
+  --secret-string '{"password":"rotated-db-password"}'
+```
+
+Đợi dưới 60 giây rồi kiểm tra mounted secret không cần restart pod:
+
+```bash
+kubectl logs -n demo deploy/secret-reader -f
+kubectl get pod -n demo -l app=secret-reader
+```
+
+Chi tiết nằm trong `eso/README.md`.
 
 ## Chạy local bằng Minikube
 
