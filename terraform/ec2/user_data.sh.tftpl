@@ -1,0 +1,176 @@
+#!/bin/bash
+set -euo pipefail
+
+exec > >(tee -a /var/log/w10-bootstrap.log) 2>&1
+
+APP_DIR="/opt/w10"
+APP_VERSION="${app_version}"
+ERROR_RATE="${error_rate}"
+REPOSITORY_BRANCH="${repository_branch}"
+REPOSITORY_URL="${repository_url}"
+
+dnf update -y
+dnf install -y curl git docker tar gzip jq conntrack-tools socat iptables
+
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+install -d -m 0755 /usr/local/bin
+
+curl -fsSL -o /usr/local/bin/kubectl \
+  "https://dl.k8s.io/release/${kubernetes_version}/bin/linux/amd64/kubectl"
+chmod +x /usr/local/bin/kubectl
+
+curl -fsSL -o /tmp/minikube-linux-amd64 \
+  https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
+
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+curl -fsSL -o /usr/local/bin/argocd \
+  https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+chmod +x /usr/local/bin/argocd
+
+curl -fsSL -o /usr/local/bin/kubectl-argo-rollouts \
+  "https://github.com/argoproj/argo-rollouts/releases/download/v${argo_rollouts_plugin_version}/kubectl-argo-rollouts-linux-amd64"
+chmod +x /usr/local/bin/kubectl-argo-rollouts
+
+sudo -u ec2-user -H minikube start \
+  -p w10 \
+  --driver=docker \
+  --container-runtime=docker \
+  --kubernetes-version="${kubernetes_version}" \
+  --cpus="${minikube_cpus}" \
+  --memory="${minikube_memory}" \
+  --disk-size="${minikube_disk_size}"
+
+sudo -u ec2-user -H kubectl config use-context w10
+
+rm -rf "$APP_DIR"
+git clone --branch "$REPOSITORY_BRANCH" --depth 1 "$REPOSITORY_URL" "$APP_DIR"
+chown -R ec2-user:ec2-user "$APP_DIR"
+
+# Build the API image inside Minikube's Docker daemon so Rollout pods can use it
+# without depending on an external registry.
+sudo -u ec2-user -H bash -lc \
+  "eval \"\$(minikube -p w10 docker-env)\" && docker build -t w10-api:local '$APP_DIR/src/api'"
+
+# The upstream lab manifests are GitOps-oriented and may point to a template repo
+# or a prebuilt GHCR image. Patch only the EC2 bootstrap copy so the lab can run
+# immediately on this single node.
+sed -i 's|image: .*w10-api:.*|image: w10-api:local|g' "$APP_DIR/app-api/rollout.yaml"
+sed -i 's|imagePullPolicy: .*|imagePullPolicy: Never|g' "$APP_DIR/app-api/rollout.yaml"
+sed -i "s|value: \"v.*\"|value: \"$${APP_VERSION}\"|g" "$APP_DIR/app-api/rollout.yaml"
+sed -i "s|value: \"0\"|value: \"$${ERROR_RATE}\"|g" "$APP_DIR/app-api/rollout.yaml"
+
+sudo -u ec2-user -H kubectl create namespace argocd --dry-run=client -o yaml | sudo -u ec2-user -H kubectl apply -f -
+sudo -u ec2-user -H kubectl apply --server-side -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+sudo -u ec2-user -H kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
+
+sudo -u ec2-user -H helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+sudo -u ec2-user -H helm repo add argo https://argoproj.github.io/argo-helm
+sudo -u ec2-user -H helm repo update
+
+sudo -u ec2-user -H helm upgrade --install argo-rollouts argo/argo-rollouts \
+  --namespace argo-rollouts \
+  --create-namespace \
+  --version "${argo_rollouts_chart_version}" \
+  --wait \
+  --timeout 10m
+
+cat >/tmp/kube-prometheus-stack-values.yaml <<'VALUES'
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+grafana:
+  enabled: true
+alertmanager:
+  enabled: true
+VALUES
+
+sudo -u ec2-user -H helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --version "${prometheus_stack_version}" \
+  -f /tmp/kube-prometheus-stack-values.yaml \
+  --wait \
+  --timeout 15m
+
+sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-common/demo-namespace.yaml"
+sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-analysis/analysis-template.yaml"
+sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-alert/prometheus-rules.yaml"
+sudo -u ec2-user -H kubectl apply -f "$APP_DIR/app-api/"
+
+sudo -u ec2-user -H kubectl -n demo rollout status rollout/api --timeout=10m || true
+
+cat >/usr/local/bin/w10-port-forward <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+KIND="$1"
+NAMESPACE="$2"
+NAME="$3"
+LOCAL_PORT="$4"
+REMOTE_PORT="$5"
+
+exec kubectl -n "$NAMESPACE" port-forward --address 0.0.0.0 "$KIND/$NAME" "$LOCAL_PORT:$REMOTE_PORT"
+SCRIPT
+chmod +x /usr/local/bin/w10-port-forward
+
+create_port_forward_service() {
+  local service_name="$1"
+  local namespace="$2"
+  local resource_name="$3"
+  local local_port="$4"
+  local remote_port="$5"
+
+  cat >"/etc/systemd/system/$service_name.service" <<SERVICE
+[Unit]
+Description=W10 port-forward $namespace/$resource_name to $local_port
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+Environment=KUBECONFIG=/home/ec2-user/.kube/config
+ExecStart=/usr/local/bin/w10-port-forward svc $namespace $resource_name $local_port $remote_port
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+  systemctl enable --now "$service_name.service"
+}
+
+create_port_forward_service w10-argocd-port-forward argocd argocd-server "${argocd_port}" 443
+create_port_forward_service w10-api-port-forward demo api "${api_port}" 80
+create_port_forward_service w10-prometheus-port-forward monitoring kube-prometheus-stack-prometheus "${prometheus_port}" 9090
+create_port_forward_service w10-grafana-port-forward monitoring kube-prometheus-stack-grafana "${grafana_port}" 80
+create_port_forward_service w10-alertmanager-port-forward monitoring kube-prometheus-stack-alertmanager "${alertmanager_port}" 9093
+
+cat >/home/ec2-user/w10-lab-info.txt <<INFO
+W10 lab bootstrap completed.
+
+Repository clone: $APP_DIR
+Bootstrap log: /var/log/w10-bootstrap.log
+
+Useful commands:
+  kubectl get pods -A
+  kubectl get rollout api -n demo
+  kubectl argo rollouts get rollout api -n demo
+  kubectl get analysisrun -n demo
+  kubectl get servicemonitor,prometheusrule -A
+  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+
+Exposed ports on the EC2 public IP:
+  ArgoCD:       ${argocd_port}
+  W10 API:      ${api_port}
+  Prometheus:   ${prometheus_port}
+  Grafana:      ${grafana_port}
+  Alertmanager: ${alertmanager_port}
+INFO
+chown ec2-user:ec2-user /home/ec2-user/w10-lab-info.txt

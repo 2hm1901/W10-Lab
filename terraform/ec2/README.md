@@ -1,0 +1,89 @@
+# Deploy W10 API to EC2
+
+Terraform này tạo một EC2 để chạy lại lab local trên AWS bằng Minikube:
+
+- EC2 Amazon Linux 2023, mặc định `t3.large`, EBS `50GiB`
+- Docker
+- Minikube single-node Kubernetes cluster
+- `kubectl`, `helm`, `argocd`, `kubectl argo rollouts`
+- ArgoCD
+- Argo Rollouts controller
+- kube-prometheus-stack gồm Prometheus, Alertmanager, Grafana
+- W10 API Rollout, Service, ServiceMonitor, AnalysisTemplate, PrometheusRule
+- SSH key bằng `tls_private_key`
+- File private key local bằng `local_sensitive_file`
+- AWS key pair bằng `aws_key_pair`
+
+User-data sẽ clone repo, build image `src/api` vào Docker daemon của Minikube, patch bản manifest bootstrap để dùng image local `w10-api:local`, rồi apply các manifest cần thiết.
+
+## Cách dùng
+
+```bash
+cd terraform/ec2
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Sửa `terraform.tfvars`, đặc biệt:
+
+```hcl
+ssh_allowed_cidr = "YOUR_PUBLIC_IP/32"
+lab_allowed_cidr = "YOUR_PUBLIC_IP/32"
+```
+
+Sau đó chạy:
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+Bootstrap mất vài phút. Theo dõi log:
+
+```bash
+ssh -i generated/w10.pem ec2-user@$(terraform output -raw public_ip)
+sudo tail -f /var/log/w10-bootstrap.log
+```
+
+## URL truy cập
+
+```bash
+terraform output argocd_url
+terraform output api_url
+terraform output prometheus_url
+terraform output grafana_url
+terraform output alertmanager_url
+```
+
+ArgoCD dùng user `admin`. Lấy password:
+
+```bash
+terraform output -raw argocd_initial_password_command
+```
+
+Rồi chạy command đó.
+
+## Kiểm tra lab trên EC2
+
+```bash
+kubectl get pods -A
+kubectl get rollout api -n demo
+kubectl argo rollouts get rollout api -n demo
+kubectl get analysisrun -n demo
+kubectl get servicemonitor,prometheusrule -A
+curl "$(terraform output -raw api_url)"
+curl "$(terraform output -raw api_url)/healthz"
+curl "$(terraform output -raw api_url)/metrics"
+```
+
+Thông tin nhanh sau bootstrap nằm ở `/home/ec2-user/w10-lab-info.txt`.
+
+## Xóa hạ tầng
+
+```bash
+terraform destroy
+```
+
+Private key được tạo tại `terraform/ec2/generated/w10.pem`.
+
+Lưu ý: `tls_private_key` lưu private key trong Terraform state. Không commit hoặc chia sẻ state.

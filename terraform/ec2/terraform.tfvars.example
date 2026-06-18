@@ -1,0 +1,26 @@
+aws_region       = "ap-southeast-1"
+project_name     = "w10"
+instance_type    = "t3.large"
+root_volume_size = 50
+ssh_allowed_cidr = "YOUR_PUBLIC_IP/32"
+lab_allowed_cidr = "YOUR_PUBLIC_IP/32"
+
+repository_url    = "https://github.com/2hm1901/W10-Lab.git"
+repository_branch = "main"
+
+app_version = "ec2"
+error_rate  = "0"
+
+kubernetes_version           = "v1.31.0"
+minikube_cpus                = 2
+minikube_memory              = "6144mb"
+minikube_disk_size           = "35g"
+prometheus_stack_version     = "65.1.1"
+argo_rollouts_chart_version  = "2.37.7"
+argo_rollouts_plugin_version = "1.7.2"
+
+argocd_port       = 8080
+api_port          = 8081
+prometheus_port   = 9090
+grafana_port      = 3000
+alertmanager_port = 9093

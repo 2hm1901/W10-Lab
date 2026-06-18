@@ -10,3 +10,10 @@ k8s-monitoring/alertmanager-config.yaml
 
 # OS
 .DS_Store
+
+# Terraform
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+terraform/ec2/generated/
