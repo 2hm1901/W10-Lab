@@ -337,80 +337,200 @@ Các test dưới đây dùng để chứng minh vòng feedback của progressiv
 bạn thay error rate, GitOps/ArgoCD sync manifest mới, Argo Rollouts tạo canary,
 AnalysisTemplate hỏi Prometheus, rồi rollout pass hoặc rollback dựa trên metric.
 
-### Test 1: Canary thành công
+### Chuẩn bị trước khi test trên EC2
 
-Sửa `ERROR_RATE` trong `app-api/rollout.yaml`:
-
-```yaml
-- name: ERROR_RATE
-  value: "0"
-```
-
-Commit và push:
+SSH vào EC2:
 
 ```bash
-git add app-api/rollout.yaml
-git commit -m "test: deploy with 0 percent error rate"
-git push origin main
+ssh -i terraform/ec2/generated/w10.pem ec2-user@$(cd terraform/ec2 && terraform output -raw public_ip)
+```
+
+Kiểm tra các thành phần chính:
+
+```bash
+kubectl get applications -n argocd
+kubectl get pods -A
+kubectl get rollout api -n demo
+kubectl get analysisrun -n demo
+kubectl get servicemonitor -n demo
+kubectl get prometheusrule -n monitoring
+```
+
+Kỳ vọng:
+
+- ArgoCD đã có root app và các child apps nếu bạn đã chạy
+  `kubectl apply -f /opt/w10/argocd/root.yaml`.
+- API rollout tồn tại trong namespace `demo`.
+- Prometheus stack chạy trong namespace `monitoring`.
+- `ServiceMonitor/api` và `PrometheusRule/slo-alerts` tồn tại.
+
+Mở 2 terminal SSH vào EC2 sẽ dễ quan sát hơn:
+
+Terminal 1, watch rollout:
+
+```bash
+kubectl argo rollouts get rollout api -n demo --watch
+```
+
+Terminal 2, xem AnalysisRun và event:
+
+```bash
+watch -n 5 'kubectl get analysisrun -n demo; echo; kubectl get events -n demo --sort-by=.lastTimestamp | tail -20'
+```
+
+Tạo traffic trong lúc test để Prometheus có metric:
+
+```bash
+while true; do
+  kubectl -n demo run curl-api-$(date +%s%N) --image=curlimages/curl:latest --rm -i --restart=Never -- \
+    curl -s http://api.demo.svc.cluster.local/ >/dev/null || true
+  sleep 1
+done
+```
+
+Dừng traffic bằng `Ctrl+C` sau khi test xong.
+
+### Cách thay đổi workload khi test
+
+Có 2 cách:
+
+- GitOps: sửa `app-api/rollout.yaml`, commit, push, để ArgoCD sync.
+- EC2 nhanh: patch trực tiếp `Rollout` bằng `kubectl patch`.
+
+Với lab trên EC2, cách patch trực tiếp dễ quan sát hơn vì không phụ thuộc GHCR
+image pull. Khi patch, luôn đổi cả `VERSION` để Kubernetes tạo ReplicaSet mới.
+
+### Test 1: Canary thành công
+
+Mục tiêu: chứng minh version mới có success rate tốt thì rollout được promote.
+
+Chạy trên EC2:
+
+```bash
+kubectl -n demo patch rollout api --type='json' \
+  -p='[
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"success-test"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"0"}
+  ]'
 ```
 
 Theo dõi:
 
 ```bash
-kubectl get rollout api -n demo -w
+kubectl argo rollouts get rollout api -n demo --watch
 kubectl get analysisrun -n demo
 ```
 
-Kỳ vọng: Rollout đi tới `Healthy`, AnalysisRun pass vì success rate đạt ngưỡng.
+Kiểm tra API:
+
+```bash
+kubectl -n demo run curl-success --image=curlimages/curl:latest --rm -i --restart=Never -- \
+  curl -s http://api.demo.svc.cluster.local/
+```
+
+Kỳ vọng:
+
+- Rollout đi qua các bước `10% -> 50% -> 100%`.
+- AnalysisRun `Successful`.
+- Rollout cuối cùng `Healthy`.
 
 ### Test 2: Canary fail và rollback
 
-Sửa `ERROR_RATE`:
+Mục tiêu: chứng minh version mới có lỗi cao thì AnalysisRun fail và rollout
+không promote version lỗi.
 
-```yaml
-- name: ERROR_RATE
-  value: "0.15"
-```
-
-Commit và push:
+Patch `ERROR_RATE` cao để fail rõ ràng. Dùng `0.50` thay vì `0.15` để kết quả
+ổn định hơn khi canary chỉ nhận một phần traffic.
 
 ```bash
-git add app-api/rollout.yaml
-git commit -m "test: deploy with 15 percent error rate"
-git push origin main
+kubectl -n demo patch rollout api --type='json' \
+  -p='[
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"fail-test"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"0.50"}
+  ]'
 ```
 
 Theo dõi:
 
 ```bash
-kubectl get analysisrun -n demo -w
-kubectl get rollout api -n demo
+kubectl argo rollouts get rollout api -n demo --watch
+kubectl get analysisrun -n demo
+kubectl describe analysisrun -n demo $(kubectl get analysisrun -n demo --sort-by=.metadata.creationTimestamp -o name | tail -1)
 ```
 
-Kỳ vọng: AnalysisRun fail khi success rate thấp, Rollout không promote version
-mới và tự rollback theo cơ chế của Argo Rollouts.
+Kỳ vọng:
+
+- AnalysisRun fail vì query Prometheus thấy success rate thấp hơn `0.90`.
+- Rollout không promote bản `fail-test` lên stable.
+- Argo Rollouts giữ hoặc rollback về ReplicaSet ổn định trước đó.
+
+Nếu AnalysisRun chưa fail ngay, tiếp tục tạo traffic thêm vài phút. Prometheus
+cần đủ mẫu trong cửa sổ `[2m]` của `app-analysis/analysis-template.yaml`.
 
 ### Test 3: Trigger SLO alert
 
-Sửa `ERROR_RATE`:
+Mục tiêu: chứng minh alert SLO dùng ngưỡng khác với canary analysis.
 
-```yaml
-- name: ERROR_RATE
-  value: "0.10"
+- Canary analysis pass nếu success rate `>= 90%`.
+- SLO alert fire nếu success rate `< 95%` trong `2m`.
+
+Patch lỗi khoảng 10-20%. `0.20` dễ thấy alert hơn:
+
+```bash
+kubectl -n demo patch rollout api --type='json' \
+  -p='[
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"slo-alert-test"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"0.20"}
+  ]'
 ```
 
-Canary vẫn có thể pass nếu ngưỡng analysis là `>= 90%`, nhưng alert SLO sẽ fire
-khi success rate thấp hơn `95%` trong rule `app-alert/prometheus-rules.yaml`.
+Tạo traffic liên tục 3-5 phút, rồi query Prometheus:
+
+```bash
+kubectl run prom-success-query --image=curlimages/curl:latest --rm -i --restart=Never -n monitoring -- \
+  curl -s 'http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query?query=api:success_rate:5m'
+```
 
 Theo dõi alert:
 
 ```bash
-kubectl get prometheusrule -n monitoring
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+kubectl get prometheusrule slo-alerts -n monitoring
+kubectl run prom-alert-query --image=curlimages/curl:latest --rm -i --restart=Never -n monitoring -- \
+  curl -s 'http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query?query=ALERTS%7Balertname%3D%22SLOViolation%22%7D'
 ```
 
-Nếu chạy trên EC2, có thể dùng luôn `terraform output -raw alertmanager_url` từ
-máy local để mở Alertmanager.
+Mở Alertmanager từ máy local:
+
+```bash
+cd terraform/ec2
+terraform output -raw alertmanager_url
+```
+
+Kỳ vọng:
+
+- Alert `SLOViolation` chuyển sang firing sau khi rule giữ điều kiện đủ `2m`.
+- Nếu đã cấu hình email secret theo `app-alert/README.md`, Alertmanager gửi email.
+
+### Reset sau các test
+
+Đưa API về trạng thái không lỗi:
+
+```bash
+kubectl -n demo patch rollout api --type='json' \
+  -p='[
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"reset"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/env/1/value","value":"0"}
+  ]'
+```
+
+Theo dõi rollout ổn định lại:
+
+```bash
+kubectl argo rollouts get rollout api -n demo --watch
+```
+
+Nếu muốn quay lại GitOps source đúng repo, sửa `app-api/rollout.yaml` trong repo,
+commit, push rồi sync app `api` trong ArgoCD.
 
 ## Email alert
 
