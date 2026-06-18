@@ -89,14 +89,117 @@ terraform plan
 terraform apply
 ```
 
-Theo dõi bootstrap:
+Sau khi `terraform apply` xong, Terraform mới chỉ đảm bảo EC2 đã được tạo. Bên
+trong EC2, `user_data` vẫn đang chạy bootstrap để cài tool và deploy lab. Vì vậy
+việc tiếp theo là SSH vào EC2 và theo dõi log bootstrap.
+
+Trên máy local:
 
 ```bash
 ssh -i generated/w10.pem ec2-user@$(terraform output -raw public_ip)
+```
+
+Trong EC2:
+
+```bash
 sudo tail -f /var/log/w10-bootstrap.log
 ```
 
-### Truy cập service trên EC2
+Bootstrap thành công khi log chạy qua các bước chính sau:
+
+- Minikube báo `Done! kubectl is now configured to use "w10" cluster`.
+- Docker build image `w10-api:local` thành công.
+- `minikube image load w10-api:local` nạp image vào cluster.
+- ArgoCD deployment rollout xong.
+- Helm cài xong `argo-rollouts` và `kube-prometheus-stack`.
+- Các manifest trong `app-common`, `app-analysis`, `app-alert`, `app-api` được apply.
+- File `/home/ec2-user/w10-lab-info.txt` được tạo.
+
+Nếu log dừng giữa chừng, chưa nên test rollout hoặc UI vội. Hãy đọc 50-100 dòng
+cuối log để xem lỗi cụ thể:
+
+```bash
+sudo tail -n 100 /var/log/w10-bootstrap.log
+```
+
+### Sau khi bootstrap xong
+
+Mục tiêu của các bước dưới đây là xác nhận từng lớp của lab đã hoạt động:
+Kubernetes trước, sau đó controller/monitoring, sau đó API và cuối cùng là UI.
+
+#### 1. Kiểm tra Kubernetes cluster
+
+```bash
+kubectl get nodes
+kubectl get ns
+kubectl get pods -A
+```
+
+Vì sao làm bước này: nếu node hoặc pod hệ thống chưa ổn, các lỗi ở ArgoCD,
+Rollouts hoặc Prometheus phía sau chỉ là hệ quả. Cluster ổn thì node `w10`
+phải `Ready`, các pod `kube-system` phải `Running`.
+
+#### 2. Kiểm tra controller và CRD của lab
+
+```bash
+kubectl get crd | grep -E 'argoproj.io|monitoring.coreos.com'
+kubectl get pods -n argocd
+kubectl get pods -n argo-rollouts
+kubectl get pods -n monitoring
+```
+
+Vì sao làm bước này: `Rollout`, `AnalysisRun`, `ServiceMonitor` và
+`PrometheusRule` là custom resources. Nếu CRD chưa có, các lệnh như
+`kubectl get rollout` hoặc `kubectl get servicemonitor` sẽ báo
+`the server doesn't have a resource type`.
+
+#### 3. Kiểm tra API rollout
+
+```bash
+kubectl get rollout api -n demo
+kubectl argo rollouts get rollout api -n demo
+kubectl get analysisrun -n demo
+kubectl get servicemonitor,prometheusrule -A
+```
+
+Vì sao làm bước này: đây là phần chính của lab. `Rollout` cho biết canary đang
+ở bước nào, `AnalysisRun` cho biết Prometheus query có pass hay fail, còn
+`ServiceMonitor`/`PrometheusRule` xác nhận monitoring đã nhận workload.
+
+#### 4. Test API
+
+Trên máy local, lấy URL API:
+
+```bash
+cd terraform/ec2
+terraform output -raw api_url
+```
+
+Gọi thử API:
+
+```bash
+curl "$(terraform output -raw api_url)"
+curl "$(terraform output -raw api_url)/healthz"
+curl "$(terraform output -raw api_url)/metrics"
+```
+
+Vì sao làm bước này:
+
+- `/` xác nhận app trả response nghiệp vụ.
+- `/healthz` là endpoint Kubernetes dùng cho liveness/readiness probe.
+- `/metrics` là endpoint Prometheus scrape để tính success rate.
+
+Nếu đang SSH trong EC2 thì không dùng được `terraform output` trừ khi bạn cũng
+copy Terraform state vào EC2. Khi ở trong EC2, gọi qua service nội bộ:
+
+```bash
+kubectl -n demo run curl-api --image=curlimages/curl:latest --rm -i --restart=Never -- \
+  curl -s http://api.demo.svc.cluster.local/healthz
+```
+
+#### 5. Truy cập các UI và endpoint public
+
+Trên máy local:
 
 ```bash
 terraform output argocd_url
@@ -114,39 +217,33 @@ Port mặc định:
 - Grafana: `3000`
 - Alertmanager: `9093`
 
+Vì sao làm bước này:
+
+- ArgoCD để xem trạng thái sync GitOps và các Application.
+- API để test workload từ bên ngoài EC2.
+- Prometheus để query metric, ví dụ success rate.
+- Grafana để xem dashboard do kube-prometheus-stack tạo.
+- Alertmanager để xem alert firing/resolved.
+
 Lấy password ArgoCD:
 
 ```bash
 terraform output -raw argocd_initial_password_command
 ```
 
-Copy command được in ra và chạy. User mặc định của ArgoCD là `admin`.
+Copy command được in ra và chạy. User mặc định của ArgoCD là `admin`. Trình
+duyệt có thể cảnh báo HTTPS certificate vì ArgoCD dùng self-signed cert trong
+lab; accept để tiếp tục.
 
-### Kiểm tra lab trên EC2
+#### 6. Đọc file hướng dẫn nhanh trên EC2
 
-SSH vào EC2 rồi chạy:
-
-```bash
-kubectl get pods -A
-kubectl get rollout api -n demo
-kubectl argo rollouts get rollout api -n demo
-kubectl get analysisrun -n demo
-kubectl get servicemonitor,prometheusrule -A
-```
-
-Kiểm tra API:
+Bootstrap tạo sẵn file này trong EC2:
 
 ```bash
-curl "$(terraform output -raw api_url)"
-curl "$(terraform output -raw api_url)/healthz"
-curl "$(terraform output -raw api_url)/metrics"
+cat /home/ec2-user/w10-lab-info.txt
 ```
 
-Thông tin nhanh sau bootstrap nằm tại:
-
-```bash
-/home/ec2-user/w10-lab-info.txt
-```
+File này nhắc lại các lệnh kiểm tra thường dùng và danh sách port đang expose.
 
 ## Chạy local bằng Minikube
 
@@ -181,11 +278,12 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 ### 4. Build image API
 
-Với local Minikube, build image vào Docker daemon của Minikube:
+Với local Minikube, cách đơn giản là build image trên máy local rồi load vào
+Minikube:
 
 ```bash
-eval "$(minikube -p w10 docker-env)"
 docker build -t w10-api:local src/api
+minikube -p w10 image load w10-api:local
 ```
 
 Sau đó sửa `app-api/rollout.yaml`:
@@ -205,6 +303,10 @@ kubectl apply -f argocd/root.yaml
 ```
 
 ## Test scenarios
+
+Các test dưới đây dùng để chứng minh vòng feedback của progressive delivery:
+bạn thay error rate, GitOps/ArgoCD sync manifest mới, Argo Rollouts tạo canary,
+AnalysisTemplate hỏi Prometheus, rồi rollout pass hoặc rollback dựa trên metric.
 
 ### Test 1: Canary thành công
 
@@ -230,6 +332,8 @@ kubectl get rollout api -n demo -w
 kubectl get analysisrun -n demo
 ```
 
+Kỳ vọng: Rollout đi tới `Healthy`, AnalysisRun pass vì success rate đạt ngưỡng.
+
 ### Test 2: Canary fail và rollback
 
 Sửa `ERROR_RATE`:
@@ -254,6 +358,9 @@ kubectl get analysisrun -n demo -w
 kubectl get rollout api -n demo
 ```
 
+Kỳ vọng: AnalysisRun fail khi success rate thấp, Rollout không promote version
+mới và tự rollback theo cơ chế của Argo Rollouts.
+
 ### Test 3: Trigger SLO alert
 
 Sửa `ERROR_RATE`:
@@ -265,6 +372,16 @@ Sửa `ERROR_RATE`:
 
 Canary vẫn có thể pass nếu ngưỡng analysis là `>= 90%`, nhưng alert SLO sẽ fire
 khi success rate thấp hơn `95%` trong rule `app-alert/prometheus-rules.yaml`.
+
+Theo dõi alert:
+
+```bash
+kubectl get prometheusrule -n monitoring
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+```
+
+Nếu chạy trên EC2, có thể dùng luôn `terraform output -raw alertmanager_url` từ
+máy local để mở Alertmanager.
 
 ## Email alert
 
