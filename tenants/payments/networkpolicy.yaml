@@ -12,8 +12,11 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
+  # podSelector: {} chọn tất cả pod trong namespace payments.
   podSelector: {}
   policyTypes:
+  # Khi có Ingress policy chọn pod, traffic inbound không được allow rõ ràng sẽ
+  # bị deny.
   - Ingress
 ---
 apiVersion: networking.k8s.io/v1
@@ -29,6 +32,7 @@ spec:
   - Ingress
   ingress:
   - from:
+    # podSelector không kèm namespaceSelector nghĩa là chỉ pod cùng namespace.
     - podSelector: {}
 ---
 apiVersion: networking.k8s.io/v1
@@ -41,11 +45,14 @@ metadata:
 spec:
   podSelector: {}
   policyTypes:
+  # Khi có Egress policy chọn pod, traffic outbound không được allow sẽ bị deny.
   - Egress
   egress:
   - to:
+    # Cho phép payments pod gọi service/pod cùng namespace.
     - podSelector: {}
   - to:
+    # Cho phép DNS để pod vẫn resolve được service names như *.svc.cluster.local.
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: kube-system

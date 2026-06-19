@@ -13,6 +13,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
+  # Giữ replicas nhỏ để nằm trong ResourceQuota payments và phù hợp lab single-node.
   replicas: 1
   selector:
     matchLabels:
@@ -23,9 +24,11 @@ spec:
         app: payments-api
     spec:
       securityContext:
+        # Non-root UID để pass Gatekeeper rule cấm runAsUser: 0.
         runAsUser: 1000
       containers:
       - name: api
+        # Dùng tag pin version, không dùng :latest để pass Gatekeeper.
         image: ghcr.io/2hm1901/w10-api:0.0.1
         imagePullPolicy: IfNotPresent
         ports:
@@ -37,9 +40,11 @@ spec:
         - name: ERROR_RATE
           value: "0"
         resources:
+          # requests được scheduler và ResourceQuota dùng để tính ngân sách.
           requests:
             cpu: 50m
             memory: 64Mi
+          # limits bắt buộc bởi Gatekeeper K8sRequiredLimits.
           limits:
             cpu: 200m
             memory: 128Mi

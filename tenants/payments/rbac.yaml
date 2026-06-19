@@ -8,14 +8,19 @@ metadata:
   name: payments-developer
   namespace: payments
   annotations:
+    # Role tạo sau namespace, trước RoleBinding.
     argocd.argoproj.io/sync-wave: "1"
 rules:
+# Core API group: cho phép payments-dev quản lý pod/service/configmap cơ bản
+# trong namespace payments. Không có secrets để tránh đọc credential.
 - apiGroups: [""]
   resources: ["pods", "pods/log", "services", "configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# apps API group: cho phép quản lý Deployment/ReplicaSet của team.
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Nếu team dùng Argo Rollouts thì Role cũng cho CRUD Rollout trong namespace này.
 - apiGroups: ["argoproj.io"]
   resources: ["rollouts"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -26,12 +31,16 @@ metadata:
   name: payments-dev-developer
   namespace: payments
   annotations:
+    # Binding sync sau Role để roleRef đã tồn tại.
     argocd.argoproj.io/sync-wave: "2"
 subjects:
+# User này dùng để test bằng kubectl auth can-i --as=payments-dev.
 - kind: User
   name: payments-dev
   apiGroup: rbac.authorization.k8s.io
 roleRef:
+  # RoleBinding namespaced giữ quyền payments-dev chỉ trong namespace payments,
+  # không lan sang demo.
   kind: Role
   name: payments-developer
   apiGroup: rbac.authorization.k8s.io

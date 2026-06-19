@@ -18,8 +18,11 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
+      # contents: write để workflow commit lại rollout.yaml và tạo git tag.
       contents: write
+      # packages: write để push image lên GitHub Container Registry.
       packages: write
+      # id-token: write cho Cosign keyless signing bằng GitHub OIDC.
       id-token: write
 
     steps:
@@ -56,6 +59,7 @@ jobs:
             type=sha,prefix=v${{ steps.semver.outputs.version }}-
 
       - name: Build image for vulnerability scan
+        # Build local trước để Trivy scan image content trước khi push/sign.
         uses: docker/build-push-action@v6
         with:
           context: ./src/api
@@ -64,6 +68,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Scan image with Trivy
+        # Security gate: HIGH/CRITICAL CVE làm workflow fail, nên image không
+        # được push/sign nếu chưa qua scan.
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:scan-${{ github.sha }}
@@ -74,6 +80,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Build and push Docker image
+        # Chỉ chạy sau khi Trivy pass.
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -86,6 +93,7 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       - name: Sign pushed image digest with Cosign keyless
+        # Ký digest immutable. Policy Controller verify chữ ký này ở admission.
         run: |
           cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
 

@@ -1,9 +1,17 @@
 locals {
   # Prefix dùng chung để đặt tên resource AWS và file key local.
-  name_prefix                     = var.project_name
-  private_key_path                = "${path.module}/generated/${var.project_name}.pem"
-  eso_iam_user_name               = coalesce(var.eso_iam_user_name, "${var.project_name}-eso")
-  eso_credentials_script_path     = "${path.module}/generated/${var.project_name}-eso-credentials.sh"
+  name_prefix      = var.project_name
+  private_key_path = "${path.module}/generated/${var.project_name}.pem"
+
+  # Nếu không truyền eso_iam_user_name thì dùng tên ổn định theo project.
+  eso_iam_user_name = coalesce(var.eso_iam_user_name, "${var.project_name}-eso")
+
+  # Script generated chạy ở máy local, SSH vào EC2 rồi tạo Kubernetes Secret cho
+  # External Secrets Operator.
+  eso_credentials_script_path = "${path.module}/generated/${var.project_name}-eso-credentials.sh"
+
+  # AWS Secrets Manager lưu secret dạng JSON để ExternalSecret có thể lấy
+  # property "password".
   eso_initial_secret_string_value = jsonencode({ password = var.eso_initial_db_password })
 
   # Tag tối thiểu giúp nhận diện resource do Terraform quản lý.
@@ -14,6 +22,8 @@ locals {
 }
 
 # Lab dùng default VPC/subnet để giảm cấu hình đầu vào cho người học.
+# Nhược điểm: phụ thuộc account/region còn default VPC. Nếu account đã xóa
+# default VPC thì cần tạo VPC riêng hoặc khôi phục default VPC.
 data "aws_vpc" "default" {
   default = true
 }
@@ -75,6 +85,7 @@ resource "aws_security_group" "app" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
+    # SSH để theo dõi bootstrap log và chạy kubectl trên EC2.
     description = "SSH"
     from_port   = 22
     to_port     = 22
@@ -83,6 +94,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    # ArgoCD UI được systemd service trên EC2 port-forward ra port này.
     description = "ArgoCD UI"
     from_port   = var.argocd_port
     to_port     = var.argocd_port
@@ -91,6 +103,8 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    # API Flask demo, không phải Kubernetes NodePort. Traffic đi vào EC2
+    # port-forward rồi vào Service trong cluster.
     description = "W10 API"
     from_port   = var.api_port
     to_port     = var.api_port
@@ -99,6 +113,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    # Prometheus UI dùng để xem target, query metric và debug AnalysisTemplate.
     description = "Prometheus"
     from_port   = var.prometheus_port
     to_port     = var.prometheus_port
@@ -107,6 +122,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    # Grafana UI từ kube-prometheus-stack.
     description = "Grafana"
     from_port   = var.grafana_port
     to_port     = var.grafana_port
@@ -115,6 +131,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    # Alertmanager UI để xem alert firing/silenced.
     description = "Alertmanager"
     from_port   = var.alertmanager_port
     to_port     = var.alertmanager_port
@@ -123,6 +140,8 @@ resource "aws_security_group" "app" {
   }
 
   egress {
+    # EC2 cần outbound để tải packages, pull Helm charts, clone GitHub repo,
+    # pull images và gọi AWS APIs.
     description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
@@ -146,7 +165,12 @@ resource "aws_instance" "app" {
   associate_public_ip_address = true
 
   # Khi user_data thay đổi, Terraform sẽ thay EC2 để bootstrap chạy lại từ đầu.
+  # Đây là lựa chọn phù hợp cho lab vì bootstrap không idempotent hoàn toàn và
+  # cluster Minikube nên được dựng sạch khi script thay đổi.
   user_data_replace_on_change = true
+
+  # templatefile render user_data.sh.tftpl với các biến runtime. Terraform chỉ
+  # truyền giá trị; logic cài đặt nằm trong file template để dễ đọc/debug.
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     alertmanager_port            = var.alertmanager_port
     api_port                     = var.api_port

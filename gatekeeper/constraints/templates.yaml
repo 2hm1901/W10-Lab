@@ -1,15 +1,28 @@
+# ConstraintTemplate định nghĩa "loại policy" mới cho Gatekeeper.
+#
+# File này KHÔNG trực tiếp enforce namespace nào. Nó chỉ tạo CRD mới như
+# K8sDisallowedImageTags, K8sRequiredLimits... và chứa Rego logic để kiểm tra
+# manifest khi API server gửi AdmissionReview cho Gatekeeper.
+#
+# constraints.yaml mới là nơi tạo từng policy instance, chọn namespace/kind nào
+# bị enforce và truyền parameters cho template.
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8sdisallowedimagetags
   annotations:
+    # Template phải sync trước Constraint instance, nên wave thấp hơn.
     argocd.argoproj.io/sync-wave: "0"
 spec:
   crd:
     spec:
       names:
+        # kind này trở thành Kubernetes CRD mới:
+        # kind: K8sDisallowedImageTags trong constraints.yaml.
         kind: K8sDisallowedImageTags
       validation:
+        # Schema cho spec.parameters của Constraint instance.
+        # Constraint sẽ truyền parameters.tags, ví dụ ["latest"].
         openAPIV3Schema:
           type: object
           properties:
@@ -18,21 +31,29 @@ spec:
               items:
                 type: string
   targets:
+  # admission.k8s.gatekeeper.sh nghĩa là policy này chạy ở admission webhook:
+  # mỗi lần tạo/sửa object match constraint, Gatekeeper chạy Rego bên dưới.
   - target: admission.k8s.gatekeeper.sh
     rego: |
       package k8sdisallowedimagetags
 
+      # Mỗi rule violation tạo ra 1 lỗi admission. Nếu có ít nhất 1 violation,
+      # request bị reject khi enforcementAction=deny.
       violation[{"msg": msg}] {
+        # input.parameters là spec.parameters trong Constraint instance.
         tag := input.parameters.tags[_]
         container := containers[_]
         endswith(container.image, sprintf(":%s", [tag]))
         msg := sprintf("container <%s> uses disallowed image tag <%s>", [container.name, tag])
       }
 
+      # input.review.object là object người dùng đang apply.
+      # Pod có pod spec ở .spec.
       pod_spec := input.review.object.spec {
         input.review.kind.kind == "Pod"
       }
 
+      # Deployment/Rollout có pod spec ở .spec.template.spec.
       pod_spec := input.review.object.spec.template.spec {
         input.review.kind.kind == "Deployment"
       }
@@ -45,6 +66,7 @@ spec:
         c := pod_spec.containers[_]
       }
 
+      # initContainers cũng có image và cũng phải bị kiểm tra như containers.
       containers[c] {
         c := pod_spec.initContainers[_]
       }
@@ -59,6 +81,7 @@ spec:
   crd:
     spec:
       names:
+        # CRD kind dùng trong constraints.yaml để đặt maxReplicas.
         kind: K8sMaxReplicas
       validation:
         openAPIV3Schema:
@@ -72,7 +95,9 @@ spec:
       package k8smaxreplicas
 
       violation[{"msg": msg}] {
+        # Lab chỉ chặn Deployment replicas, không chặn Rollout replicas.
         input.review.kind.kind == "Deployment"
+        # Nếu .spec.replicas không khai báo, Kubernetes mặc định là 1.
         replicas := object.get(input.review.object.spec, "replicas", 1)
         max_replicas := input.parameters.maxReplicas
         replicas > max_replicas
@@ -89,6 +114,7 @@ spec:
   crd:
     spec:
       names:
+        # CRD kind dùng để yêu cầu resources.limits.cpu/memory.
         kind: K8sRequiredLimits
       validation:
         openAPIV3Schema:
@@ -104,6 +130,8 @@ spec:
       package k8srequiredlimits
 
       violation[{"msg": msg}] {
+        # Constraint truyền parameters.limits = ["cpu", "memory"].
+        # Rule chạy một lần cho từng resource và từng container.
         resource := input.parameters.limits[_]
         container := containers[_]
         not container.resources.limits[resource]
@@ -126,6 +154,7 @@ spec:
         c := pod_spec.containers[_]
       }
 
+      # Nếu initContainer thiếu limits thì cũng bị reject.
       containers[c] {
         c := pod_spec.initContainers[_]
       }
@@ -140,6 +169,7 @@ spec:
   crd:
     spec:
       names:
+        # CRD kind dùng để cấm chạy pod/container bằng UID 0.
         kind: K8sDisallowRunAsRoot
       validation:
         openAPIV3Schema:
@@ -151,11 +181,13 @@ spec:
       package k8sdisallowrunasroot
 
       violation[{"msg": msg}] {
+        # Chặn nếu pod-level securityContext khai báo chạy root.
         pod_spec.securityContext.runAsUser == 0
         msg := "pod securityContext.runAsUser must not be 0"
       }
 
       violation[{"msg": msg}] {
+        # Chặn nếu từng container override securityContext về root.
         container := containers[_]
         container.securityContext.runAsUser == 0
         msg := sprintf("container <%s> securityContext.runAsUser must not be 0", [container.name])
@@ -191,6 +223,7 @@ spec:
   crd:
     spec:
       names:
+        # CRD kind dùng để cấm hostNetwork.
         kind: K8sDisallowHostNetwork
       validation:
         openAPIV3Schema:
@@ -202,6 +235,8 @@ spec:
       package k8sdisallowhostnetwork
 
       violation[{"msg": msg}] {
+        # hostNetwork=true cho pod dùng network namespace của node, làm giảm cô
+        # lập network nên bị chặn trong lab.
         pod_spec.hostNetwork == true
         msg := "hostNetwork must not be true"
       }

@@ -1,15 +1,31 @@
+# Constraint là "policy instance" thật sự được enforce.
+#
+# templates.yaml định nghĩa kind + Rego logic. File này tạo các object thuộc
+# những kind đó, chọn namespace/kind nào bị kiểm tra và truyền parameters.
+#
+# Pattern của lab:
+# - namespace nào có label guardrails.w10.dev/enforce=true thì bị enforce.
+# - demo và payments đều có label này, nên team mới tự kế thừa guardrail cũ.
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sDisallowedImageTags
 metadata:
   name: disallow-latest-image-tag
   annotations:
+    # Constraint sync sau ConstraintTemplate vì kind K8sDisallowedImageTags phải
+    # tồn tại trước.
     argocd.argoproj.io/sync-wave: "1"
 spec:
+  # deny nghĩa là admission request vi phạm sẽ bị API server từ chối.
+  # Gatekeeper còn có dryrun/warn, nhưng lab dùng deny để chứng minh chặn thật.
   enforcementAction: deny
   match:
+    # Không hard-code namespace demo. Bất kỳ namespace nào opt-in bằng label này
+    # đều nhận cùng guardrail.
     namespaceSelector:
       matchLabels:
         guardrails.w10.dev/enforce: "true"
+    # Chỉ kiểm tra các kind dưới đây. apiGroups [""] là core API group của Pod.
+    # Deployment thuộc apps, Rollout là CRD thuộc argoproj.io.
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
@@ -18,6 +34,7 @@ spec:
     - apiGroups: ["argoproj.io"]
       kinds: ["Rollout"]
   parameters:
+    # Truyền vào input.parameters.tags trong Rego template.
     tags: ["latest"]
 ---
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -29,6 +46,7 @@ metadata:
 spec:
   enforcementAction: deny
   match:
+    # Áp cho mọi namespace tenant đã bật guardrails.w10.dev/enforce=true.
     namespaceSelector:
       matchLabels:
         guardrails.w10.dev/enforce: "true"
@@ -40,6 +58,7 @@ spec:
     - apiGroups: ["argoproj.io"]
       kinds: ["Rollout"]
   parameters:
+    # Rego sẽ yêu cầu mỗi container có resources.limits.cpu và memory.
     limits: ["cpu", "memory"]
 ---
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -51,6 +70,7 @@ metadata:
 spec:
   enforcementAction: deny
   match:
+    # Chặn root user cho Pod/Deployment/Rollout trong các namespace opt-in.
     namespaceSelector:
       matchLabels:
         guardrails.w10.dev/enforce: "true"
@@ -71,6 +91,8 @@ metadata:
 spec:
   enforcementAction: deny
   match:
+    # hostNetwork làm pod dùng network namespace của node, không phù hợp tenant
+    # isolation nên bị chặn.
     namespaceSelector:
       matchLabels:
         guardrails.w10.dev/enforce: "true"
@@ -91,6 +113,8 @@ metadata:
 spec:
   enforcementAction: deny
   match:
+    # Constraint này chỉ match Deployment. Rollout có strategy riêng nên không
+    # bị rule max replicas này kiểm tra.
     namespaceSelector:
       matchLabels:
         guardrails.w10.dev/enforce: "true"
@@ -98,4 +122,5 @@ spec:
     - apiGroups: ["apps"]
       kinds: ["Deployment"]
   parameters:
+    # Truyền vào input.parameters.maxReplicas trong template k8smaxreplicas.
     maxReplicas: 5

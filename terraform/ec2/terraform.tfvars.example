@@ -1,7 +1,12 @@
 aws_region       = "ap-southeast-2"
 project_name     = "w10"
+
+# t3.xlarge có 4 vCPU, phù hợp hơn cho lab chạy nhiều controller trên một node.
 instance_type    = "t3.xlarge"
 root_volume_size = 50
+
+# Thay YOUR_PUBLIC_IP bằng IP public của máy bạn, ví dụ 1.2.3.4/32.
+# Không nên để 0.0.0.0/0 khi mở SSH hoặc UI lab ra Internet.
 ssh_allowed_cidr = "YOUR_PUBLIC_IP/32"
 lab_allowed_cidr = "YOUR_PUBLIC_IP/32"
 
@@ -12,6 +17,7 @@ app_version = "ec2"
 error_rate  = "0"
 
 kubernetes_version           = "v1.31.0"
+# Không đặt minikube_cpus lớn hơn số vCPU của instance_type.
 minikube_cpus                = 4
 minikube_memory              = "6144mb"
 minikube_disk_size           = "35g"

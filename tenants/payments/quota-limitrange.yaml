@@ -12,10 +12,13 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   hard:
+    # Tổng request/limit của toàn namespace payments. Scheduler dùng requests
+    # để tính tài nguyên cần đặt pod.
     requests.cpu: "1"
     requests.memory: 1Gi
     limits.cpu: "2"
     limits.memory: 2Gi
+    # Giới hạn số lượng object để tránh tenant tạo quá nhiều pod/service.
     pods: "10"
     services: "5"
 ---
@@ -29,12 +32,16 @@ metadata:
 spec:
   limits:
   - type: Container
+    # Nếu pod không khai báo requests, Kubernetes sẽ default theo giá trị này.
     defaultRequest:
       cpu: 50m
       memory: 64Mi
+    # Nếu container không khai báo limits, LimitRange sẽ default để vừa thỏa
+    # Gatekeeper require limits vừa tránh container dùng quá nhiều tài nguyên.
     default:
       cpu: 200m
       memory: 128Mi
+    # Max per-container trong namespace payments.
     max:
       cpu: 500m
       memory: 512Mi

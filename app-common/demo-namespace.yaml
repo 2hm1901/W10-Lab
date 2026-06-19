@@ -6,6 +6,8 @@ metadata:
   labels:
     # Gatekeeper constraints match this label, so every tenant namespace that
     # opts in gets the same admission guardrails without copying constraints.
+    # Lưu ý: Cosign/Sigstore dùng label riêng policy.sigstore.dev/include=true
+    # và không bật mặc định để image local w10-api:local vẫn chạy được.
     guardrails.w10.dev/enforce: "true"
   annotations:
     argocd.argoproj.io/sync-wave: "0"

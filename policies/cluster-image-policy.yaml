@@ -15,10 +15,17 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   images:
+  # Chỉ các image match pattern này mới bị policy này kiểm tra chữ ký. Image
+  # khác không match thì không dùng authority bên dưới.
   - glob: ghcr.io/2hm1901/w10-api*
   authorities:
+  # authority mô tả "ai/nguồn nào được tin là đã ký image".
   - name: github-actions-keyless
     keyless:
       identities:
+      # issuer là OIDC issuer của GitHub Actions. Policy Controller sẽ kiểm tra
+      # certificate Sigstore/Fulcio của chữ ký image có issuer này.
       - issuer: https://token.actions.githubusercontent.com
+        # subject khóa chữ ký về đúng workflow build-push.yml trên branch main.
+        # Image ký bởi workflow/repo/branch khác sẽ không pass policy này.
         subject: https://github.com/2hm1901/W10-Lab/.github/workflows/build-push.yml@refs/heads/main

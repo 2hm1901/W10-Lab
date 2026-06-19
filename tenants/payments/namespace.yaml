@@ -7,6 +7,9 @@ kind: Namespace
 metadata:
   name: payments
   labels:
+    # Label này làm Gatekeeper constraints áp vào payments. Nhờ vậy team mới
+    # kế thừa guardrail cũ mà không cần copy constraint.
     guardrails.w10.dev/enforce: "true"
   annotations:
+    # Namespace phải được tạo trước RBAC/quota/netpol/workload.
     argocd.argoproj.io/sync-wave: "0"
