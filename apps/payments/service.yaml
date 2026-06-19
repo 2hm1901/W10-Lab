@@ -1,0 +1,17 @@
+# Internal service for the payments team app.
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: payments
+  labels:
+    app: payments-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  selector:
+    app: payments-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

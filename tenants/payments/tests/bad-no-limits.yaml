@@ -1,0 +1,23 @@
+# This deployment should be rejected by the inherited Gatekeeper
+# K8sRequiredLimits constraint because payments has guardrails.w10.dev/enforce.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-no-limits
+  namespace: payments
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments-no-limits
+  template:
+    metadata:
+      labels:
+        app: payments-no-limits
+    spec:
+      securityContext:
+        runAsUser: 1000
+      containers:
+      - name: app
+        image: busybox:1.36.1
+        command: ["sh", "-c", "sleep 3600"]

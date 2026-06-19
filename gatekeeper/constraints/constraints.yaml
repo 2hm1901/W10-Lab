@@ -7,7 +7,9 @@ metadata:
 spec:
   enforcementAction: deny
   match:
-    namespaces: ["demo"]
+    namespaceSelector:
+      matchLabels:
+        guardrails.w10.dev/enforce: "true"
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
@@ -27,7 +29,9 @@ metadata:
 spec:
   enforcementAction: deny
   match:
-    namespaces: ["demo"]
+    namespaceSelector:
+      matchLabels:
+        guardrails.w10.dev/enforce: "true"
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
@@ -47,7 +51,9 @@ metadata:
 spec:
   enforcementAction: deny
   match:
-    namespaces: ["demo"]
+    namespaceSelector:
+      matchLabels:
+        guardrails.w10.dev/enforce: "true"
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
@@ -65,7 +71,9 @@ metadata:
 spec:
   enforcementAction: deny
   match:
-    namespaces: ["demo"]
+    namespaceSelector:
+      matchLabels:
+        guardrails.w10.dev/enforce: "true"
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
@@ -83,7 +91,9 @@ metadata:
 spec:
   enforcementAction: deny
   match:
-    namespaces: ["demo"]
+    namespaceSelector:
+      matchLabels:
+        guardrails.w10.dev/enforce: "true"
     kinds:
     - apiGroups: ["apps"]
       kinds: ["Deployment"]

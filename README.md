@@ -28,6 +28,9 @@ ngay trên EC2.
 - `gatekeeper`: OPA Gatekeeper constraints chặn manifest vi phạm admission.
 - `eso`: External Secrets Operator config sync secret từ AWS Secrets Manager.
 - `policies`: Sigstore Policy Controller policy verify chữ ký Cosign cho image.
+- `tenants/payments`: namespace, RBAC, quota, LimitRange và NetworkPolicy cho
+  team payments.
+- `apps/payments`: workload GitOps của team payments.
 - `terraform/ec2`: Terraform tạo EC2, SSH key pair, security group và bootstrap lab.
 
 ## Cấu trúc repo
@@ -46,6 +49,8 @@ W10/
 │   └── README.md
 ├── app-common/
 │   └── demo-namespace.yaml
+├── apps/
+│   └── payments/
 ├── argocd/
 │   ├── apps/
 │   └── root.yaml
@@ -65,6 +70,8 @@ W10/
 ├── policies/
 │   ├── cluster-image-policy.yaml
 │   └── README.md
+├── tenants/
+│   └── payments/
 ├── src/api/
 │   ├── app.py
 │   └── Dockerfile
@@ -208,7 +215,7 @@ Vì sao làm bước này: `argocd/root.yaml` tạo root Application. Root app n
 tới thư mục `argocd/apps`, sau đó ArgoCD sẽ tạo các child apps như `api`,
 `analysis`, `alert`, `common`, `rbac`, `gatekeeper`, `gatekeeper-constraints`,
 `external-secrets`, `eso-config`, `policy-controller`, `policies`,
-`argo-rollouts` và `kube-prometheus-stack`.
+`payments-tenant`, `payments-app`, `argo-rollouts` và `kube-prometheus-stack`.
 Nếu chưa apply root app thì ArgoCD UI chỉ có server rỗng, không có Application.
 
 Lưu ý: EC2 bootstrap đã patch và apply bản manifest local để dùng image
@@ -503,12 +510,67 @@ kubectl argo rollouts get rollout api -n demo
 
 Chi tiết nằm trong `policies/README.md`.
 
+## Test Payments Tenant
+
+Payments lab thêm team thứ hai vào platform:
+
+```text
+Namespace payments
+  -> RBAC payments-dev chỉ trong namespace payments
+  -> ResourceQuota + LimitRange
+  -> NetworkPolicy default deny, chỉ cho cùng namespace + DNS
+  -> App payments-api qua GitOps
+```
+
+Kiểm tra app GitOps:
+
+```bash
+kubectl get application payments-tenant payments-app -n argocd
+kubectl get ns payments --show-labels
+kubectl get role,rolebinding -n payments
+kubectl get resourcequota,limitrange -n payments
+kubectl get networkpolicy -n payments
+kubectl get deploy,svc,pod -n payments
+```
+
+Test RBAC:
+
+```bash
+kubectl auth can-i create deployments -n payments --as=payments-dev
+kubectl auth can-i create deployments -n demo --as=payments-dev
+kubectl auth can-i get secrets -n payments --as=payments-dev
+kubectl auth can-i update rolebindings -n payments --as=payments-dev
+```
+
+Kỳ vọng: `yes`, `no`, `no`, `no`.
+
+Test quota và guardrail cũ tự chặn trong namespace mới:
+
+```bash
+kubectl apply -f /opt/w10/tenants/payments/tests/bad-quota-too-much-memory.yaml
+kubectl apply -f /opt/w10/tenants/payments/tests/bad-no-limits.yaml
+```
+
+Cả hai lệnh trên phải bị từ chối.
+
+Test NetworkPolicy cô lập `payments` khỏi service của `demo`:
+
+```bash
+kubectl -n payments run curl-demo \
+  --image=curlimages/curl:8.10.1 \
+  --rm -i --restart=Never -- \
+  curl -m 5 -sS http://api.demo.svc.cluster.local/healthz
+```
+
+Lệnh này chỉ fail/timeout đúng nghĩa nếu cluster dùng CNI hỗ trợ NetworkPolicy,
+ví dụ Calico. Chi tiết nằm trong `tenants/payments/README.md`.
+
 ## Chạy local bằng Minikube
 
 ### 1. Tạo cluster
 
 ```bash
-minikube start -p w10 --driver=docker
+minikube start -p w10 --driver=docker --cni=calico
 kubectl config use-context w10
 ```
 

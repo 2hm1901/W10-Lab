@@ -7,11 +7,13 @@ on:
     - 'app-analysis/**'
     - 'app-alert/**'
     - 'app-common/**'
+    - 'apps/**'
     - 'argocd/**'
     - 'rbac/**'
     - 'gatekeeper/**'
     - 'eso/**'
     - 'policies/**'
+    - 'tenants/**'
 
 jobs:
   validate:
@@ -31,4 +33,4 @@ jobs:
       run: |
         kubeconform -strict -summary -ignore-missing-schemas \
           app-api/ app-analysis/ app-alert/ app-common/ argocd/ rbac/ gatekeeper/ eso/ \
-          policies/
+          policies/ tenants/ apps/

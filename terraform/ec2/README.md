@@ -4,7 +4,8 @@ Terraform này tạo một EC2 để chạy lại lab local trên AWS bằng Min
 
 - EC2 Amazon Linux 2023, mặc định `t3.large`, EBS `50GiB`
 - Docker
-- Minikube single-node Kubernetes cluster
+- Minikube single-node Kubernetes cluster, bật Calico CNI để NetworkPolicy có
+  hiệu lực
 - `kubectl`, `helm`, `argocd`, `kubectl argo rollouts`
 - ArgoCD
 - Argo Rollouts controller
@@ -72,10 +73,16 @@ kubectl get rollout api -n demo
 kubectl argo rollouts get rollout api -n demo
 kubectl get analysisrun -n demo
 kubectl get servicemonitor,prometheusrule -A
+kubectl get pods -n kube-system | grep calico
 curl "$(terraform output -raw api_url)"
 curl "$(terraform output -raw api_url)/healthz"
 curl "$(terraform output -raw api_url)/metrics"
 ```
+
+Lưu ý: nếu EC2 được tạo trước khi bootstrap bật `--cni=calico`, các
+NetworkPolicy trong tenant lab vẫn apply được nhưng không chặn traffic thật.
+Muốn test isolation bằng NetworkPolicy, cần tạo lại cluster/EC2 với bootstrap
+mới.
 
 Thông tin nhanh sau bootstrap nằm ở `/home/ec2-user/w10-lab-info.txt`.
 

@@ -1,0 +1,14 @@
+# Namespace for the payments team.
+#
+# The labels intentionally opt the namespace into the existing platform
+# guardrails. Gatekeeper and Sigstore policies then apply to payments without
+# duplicating team-specific policy objects.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    guardrails.w10.dev/enforce: "true"
+    policy.sigstore.dev/include: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"

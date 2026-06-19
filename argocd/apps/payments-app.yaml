@@ -1,0 +1,23 @@
+# ArgoCD App: payments team workload.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payments-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/2hm1901/W10-Lab.git
+    path: apps/payments
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: payments
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true

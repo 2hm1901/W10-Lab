@@ -64,6 +64,7 @@ sudo -u ec2-user -H minikube start \
   -p w10 \
   --driver=docker \
   --container-runtime=docker \
+  --cni=calico \
   --kubernetes-version="${kubernetes_version}" \
   --cpus="${minikube_cpus}" \
   --memory="${minikube_memory}" \
@@ -200,10 +201,12 @@ Bootstrap log: /var/log/w10-bootstrap.log
 
 Useful commands:
   kubectl get pods -A
+  kubectl get pods -n kube-system | grep calico
   kubectl get rollout api -n demo
   kubectl argo rollouts get rollout api -n demo
   kubectl get analysisrun -n demo
   kubectl get servicemonitor,prometheusrule -A
+  kubectl get application payments-tenant payments-app -n argocd
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
 Exposed ports on the EC2 public IP:

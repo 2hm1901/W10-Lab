@@ -1,0 +1,21 @@
+# This pod should be rejected by the payments ResourceQuota/LimitRange because
+# it asks for more memory than the namespace allows per container.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quota-too-much-memory
+  namespace: payments
+spec:
+  securityContext:
+    runAsUser: 1000
+  containers:
+  - name: app
+    image: busybox:1.36.1
+    command: ["sh", "-c", "sleep 3600"]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 2Gi
+      limits:
+        cpu: 200m
+        memory: 2Gi

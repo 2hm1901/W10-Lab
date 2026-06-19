@@ -1,0 +1,45 @@
+# Demo application owned by the payments team.
+#
+# It uses the same signed W10 API image from Lab 2.2. The manifest is written to
+# satisfy the inherited Gatekeeper rules: pinned tag, resource limits,
+# non-root user, no hostNetwork, and replicas <= 5.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: payments
+  labels:
+    app: payments-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      securityContext:
+        runAsUser: 1000
+      containers:
+      - name: api
+        image: ghcr.io/2hm1901/w10-api:0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        env:
+        - name: VERSION
+          value: "payments-v1"
+        - name: ERROR_RATE
+          value: "0"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
