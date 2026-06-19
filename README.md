@@ -16,6 +16,13 @@ ngay trên EC2.
   - Local: Minikube trên máy cá nhân.
   - AWS: Minikube single-node trên EC2, tạo bằng Terraform.
 
+## Tài liệu học
+
+Bộ tài liệu giải thích kiến thức cốt lõi, code, lệnh chạy và cách debug nằm
+trong [docs/README.md](docs/README.md). Nên đọc theo thứ tự từ overview,
+Terraform/EC2, GitOps, Rollouts, RBAC/Gatekeeper, ESO, Trivy/Cosign đến tenant
+isolation.
+
 ## Thành phần chính
 
 - `src/api`: Flask API có endpoint `/`, `/healthz`, `/metrics`.
@@ -54,6 +61,8 @@ W10/
 ├── argocd/
 │   ├── apps/
 │   └── root.yaml
+├── docs/
+│   └── README.md
 ├── rbac/
 │   ├── roles.yaml
 │   ├── rolebindings.yaml
