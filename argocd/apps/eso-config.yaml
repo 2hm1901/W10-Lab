@@ -15,6 +15,23 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: demo
+  # External Secrets Operator defaulting may add fields to ExternalSecret after
+  # ArgoCD applies the manifest. These are runtime/default values, not Git-owned
+  # intent, so ignoring them prevents endless OutOfSync while preserving the
+  # important config: storeRef, remote secret key, target secret, and refresh.
+  ignoreDifferences:
+  - group: external-secrets.io
+    kind: ExternalSecret
+    name: api-db-password
+    namespace: demo
+    jsonPointers:
+    - /spec/refreshPolicy
+    - /spec/target/deletionPolicy
+    - /spec/target/template/engineVersion
+    - /spec/target/template/mergePolicy
+    - /spec/data/0/remoteRef/conversionStrategy
+    - /spec/data/0/remoteRef/decodingStrategy
+    - /spec/data/0/remoteRef/metadataPolicy
   syncPolicy:
     automated:
       prune: true
@@ -23,3 +40,4 @@ spec:
     - CreateNamespace=true
     - ServerSideApply=true
     - SkipDryRunOnMissingResource=true
+    - RespectIgnoreDifferences=true
