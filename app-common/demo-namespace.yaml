@@ -3,5 +3,10 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: demo
+  labels:
+    # Sigstore Policy Controller only enforces namespaces that opt in with this
+    # label. Without it, ClusterImagePolicy exists but admission does not block
+    # unsigned images in the demo namespace.
+    policy.sigstore.dev/include: "true"
   annotations:
     argocd.argoproj.io/sync-wave: "0"

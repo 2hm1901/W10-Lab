@@ -27,6 +27,7 @@ ngay trên EC2.
 - `rbac`: Role, ClusterRole và binding cho user `alice`, `bob`, `carol`.
 - `gatekeeper`: OPA Gatekeeper constraints chặn manifest vi phạm admission.
 - `eso`: External Secrets Operator config sync secret từ AWS Secrets Manager.
+- `policies`: Sigstore Policy Controller policy verify chữ ký Cosign cho image.
 - `terraform/ec2`: Terraform tạo EC2, SSH key pair, security group và bootstrap lab.
 
 ## Cấu trúc repo
@@ -60,6 +61,9 @@ W10/
 │   ├── secret-store.yaml
 │   ├── external-secret.yaml
 │   ├── secret-reader-deployment.yaml
+│   └── README.md
+├── policies/
+│   ├── cluster-image-policy.yaml
 │   └── README.md
 ├── src/api/
 │   ├── app.py
@@ -203,7 +207,8 @@ kubectl get applications -n argocd
 Vì sao làm bước này: `argocd/root.yaml` tạo root Application. Root app này trỏ
 tới thư mục `argocd/apps`, sau đó ArgoCD sẽ tạo các child apps như `api`,
 `analysis`, `alert`, `common`, `rbac`, `gatekeeper`, `gatekeeper-constraints`,
-`external-secrets`, `eso-config`, `argo-rollouts` và `kube-prometheus-stack`.
+`external-secrets`, `eso-config`, `policy-controller`, `policies`,
+`argo-rollouts` và `kube-prometheus-stack`.
 Nếu chưa apply root app thì ArgoCD UI chỉ có server rỗng, không có Application.
 
 Lưu ý: EC2 bootstrap đã patch và apply bản manifest local để dùng image
@@ -448,6 +453,55 @@ kubectl get pod -n demo -l app=secret-reader
 ```
 
 Chi tiết nằm trong `eso/README.md`.
+
+## Test Trivy + Cosign
+
+Lab này enforce supply-chain gate cho image API:
+
+```text
+GitHub Actions
+  -> build image
+  -> Trivy scan HIGH/CRITICAL
+  -> push GHCR image
+  -> Cosign keyless sign image digest
+  -> Sigstore Policy Controller verify khi tạo pod trong namespace demo
+```
+
+Nếu đã apply root app, ArgoCD sẽ sync 2 app:
+
+```bash
+kubectl get application policy-controller policies -n argocd
+```
+
+Kiểm tra controller và policy:
+
+```bash
+kubectl get pods -n cosign-system
+kubectl get clusterimagepolicy
+kubectl get ns demo --show-labels
+```
+
+Namespace `demo` phải có label `policy.sigstore.dev/include=true`; nếu không có
+label này thì policy tồn tại nhưng admission không enforce.
+
+Test image chưa ký phải bị reject:
+
+```bash
+kubectl -n demo run unsigned-api \
+  --image=ghcr.io/2hm1901/w10-api:unsigned-test \
+  --restart=Never
+```
+
+Sau khi workflow `Build and Push Image` chạy thành công, image mới được scan và
+ký. Sync lại API rồi kiểm tra Rollout:
+
+```bash
+argocd app get api --hard-refresh
+argocd app sync api
+kubectl argo rollouts get rollout api -n demo
+```
+
+Chi tiết nằm trong `policies/README.md`.
 
 ## Chạy local bằng Minikube
 

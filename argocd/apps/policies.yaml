@@ -1,0 +1,28 @@
+# ArgoCD App: Deploy image verification policies for Sigstore Policy Controller.
+#
+# Keep policies in a separate app from the controller so ArgoCD can install the
+# CRD/webhook first, then sync ClusterImagePolicy objects afterwards.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/2hm1901/W10-Lab.git
+    path: policies
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cosign-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    - SkipDryRunOnMissingResource=true
