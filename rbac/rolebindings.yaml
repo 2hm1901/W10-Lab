@@ -8,12 +8,17 @@ metadata:
   name: alice-developer
   namespace: demo
   annotations:
+    # Bindings sync sau roles để roleRef đã tồn tại khi ArgoCD apply.
     argocd.argoproj.io/sync-wave: "1"
 subjects:
+# Đây là Kubernetes username dùng trong request. Lab không tạo object User;
+# username được giả lập bằng kubectl auth can-i --as=alice.
 - kind: User
   name: alice
   apiGroup: rbac.authorization.k8s.io
 roleRef:
+# RoleBinding trỏ tới Role developer trong cùng namespace demo.
+# Vì là RoleBinding namespaced, alice chỉ có quyền developer ở demo.
   kind: Role
   name: developer
   apiGroup: rbac.authorization.k8s.io
@@ -25,10 +30,12 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 subjects:
+# bob cần quyền SRE trên toàn cluster nên được bind bằng ClusterRoleBinding.
 - kind: User
   name: bob
   apiGroup: rbac.authorization.k8s.io
 roleRef:
+# ClusterRoleBinding + ClusterRole làm quyền có hiệu lực ở mọi namespace.
   kind: ClusterRole
   name: sre
   apiGroup: rbac.authorization.k8s.io
@@ -40,10 +47,12 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 subjects:
+# carol là người xem toàn cluster, dùng cho demo read-only access.
 - kind: User
   name: carol
   apiGroup: rbac.authorization.k8s.io
 roleRef:
+# viewer chỉ có get/list/watch nên dù scope toàn cluster vẫn không sửa được gì.
   kind: ClusterRole
   name: viewer
   apiGroup: rbac.authorization.k8s.io
@@ -55,6 +64,8 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 subjects:
+# Gắn quyền self-check cho cả 3 user để các bài test auth can-i hoạt động nhất
+# quán khi giả lập request bằng --as.
 - kind: User
   name: alice
   apiGroup: rbac.authorization.k8s.io
@@ -65,6 +76,7 @@ subjects:
   name: carol
   apiGroup: rbac.authorization.k8s.io
 roleRef:
+# ClusterRole này chỉ cho tạo SelfSubjectAccessReview, không mở thêm quyền app.
   kind: ClusterRole
   name: rbac-self-check
   apiGroup: rbac.authorization.k8s.io

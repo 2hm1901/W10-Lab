@@ -9,14 +9,20 @@ metadata:
   name: developer
   namespace: demo
   annotations:
+    # Role phải được tạo trước RoleBinding, nên để sync-wave thấp hơn.
     argocd.argoproj.io/sync-wave: "0"
 rules:
+# apiGroups [""] là core API group của Kubernetes: pods, services, secrets...
+# Role này chỉ nằm trong namespace demo, nên dù có quyền create/delete thì alice
+# cũng không thể dùng quyền này ở namespace khác.
 - apiGroups: [""]
   resources: ["pods", "pods/log", "services", "configmaps", "secrets"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Workload chuẩn của Kubernetes nằm trong API group apps.
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Argo Rollouts là CRD, nên cần cấp quyền riêng trên API group argoproj.io.
 - apiGroups: ["argoproj.io"]
   resources: ["rollouts"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -28,9 +34,13 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 rules:
+# bob là SRE nên cần thao tác pod trên toàn cluster, kể cả exec/port-forward để
+# debug. Vì scope toàn cluster nên dùng ClusterRole.
 - apiGroups: [""]
   resources: ["pods", "pods/log", "pods/exec", "pods/portforward"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# SRE cần xem events và namespaces để điều tra lỗi scheduling, image pull,
+# admission reject... nhưng chỉ cấp quyền đọc cho các resource này.
 - apiGroups: [""]
   resources: ["events", "namespaces"]
   verbs: ["get", "list", "watch"]
@@ -42,6 +52,8 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 rules:
+# carol là viewer toàn cluster: đọc được mọi resource nhưng không tạo/sửa/xóa.
+# apiGroups/resources ["*"] giúp role bao phủ cả core resource và CRD.
 - apiGroups: ["*"]
   resources: ["*"]
   verbs: ["get", "list", "watch"]
@@ -53,6 +65,9 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 rules:
+# Quyền này chỉ để người học chạy các lệnh self-check kiểu:
+# kubectl auth can-i ... --as=<user>
+# Không cấp thêm quyền workload nào.
 - apiGroups: ["authorization.k8s.io"]
   resources: ["selfsubjectaccessreviews"]
   verbs: ["create"]
