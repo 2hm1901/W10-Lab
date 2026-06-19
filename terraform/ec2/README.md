@@ -2,7 +2,7 @@
 
 Terraform này tạo một EC2 để chạy lại lab local trên AWS bằng Minikube:
 
-- EC2 Amazon Linux 2023, mặc định `t3.large`, EBS `50GiB`
+- EC2 Amazon Linux 2023, mặc định `t3.xlarge`, EBS `50GiB`
 - Docker
 - Minikube single-node Kubernetes cluster, bật Calico CNI để NetworkPolicy có
   hiệu lực

@@ -87,7 +87,7 @@ W10/
 
 Terraform trong `terraform/ec2` tạo:
 
-- EC2 Amazon Linux 2023, mặc định `t3.large`, root disk `50GiB`.
+- EC2 Amazon Linux 2023, mặc định `t3.xlarge`, root disk `50GiB`.
 - Security Group mở SSH và các port lab.
 - SSH key pair bằng provider `tls` và lưu private key bằng provider `local`.
 - Docker, Minikube, kubectl, Helm, ArgoCD CLI, kubectl argo rollouts plugin.

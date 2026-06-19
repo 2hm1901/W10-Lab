@@ -13,7 +13,7 @@ variable "project_name" {
 variable "instance_type" {
   description = "EC2 instance type."
   type        = string
-  default     = "t3.large"
+  default     = "t3.xlarge"
 }
 
 variable "root_volume_size" {
@@ -97,7 +97,7 @@ variable "kubernetes_version" {
 variable "minikube_cpus" {
   description = "CPU cores allocated to Minikube."
   type        = number
-  default     = 2
+  default     = 4
 }
 
 variable "minikube_memory" {
