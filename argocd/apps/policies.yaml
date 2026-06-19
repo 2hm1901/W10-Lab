@@ -18,6 +18,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: cosign-system
+  # Policy Controller's defaulting webhook may add runtime/default fields to
+  # ClusterImagePolicy. Keep ArgoCD focused on the Git-owned policy intent:
+  # image glob and trusted GitHub Actions identity.
+  ignoreDifferences:
+  - group: policy.sigstore.dev
+    kind: ClusterImagePolicy
+    name: w10-api-keyless-signature
+    jsonPointers:
+    - /spec/mode
+    - /spec/authorities/0/keyless/url
   syncPolicy:
     automated:
       prune: true
@@ -26,3 +36,4 @@ spec:
     - CreateNamespace=true
     - ServerSideApply=true
     - SkipDryRunOnMissingResource=true
+    - RespectIgnoreDifferences=true

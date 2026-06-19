@@ -30,6 +30,20 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: cosign-system
+  # The policy-controller chart creates admission webhooks whose caBundle is
+  # maintained at runtime. ArgoCD should not fight that generated certificate
+  # data, otherwise the app stays OutOfSync even after a successful sync.
+  ignoreDifferences:
+  - group: admissionregistration.k8s.io
+    kind: MutatingWebhookConfiguration
+    name: policy.sigstore.dev
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
+  - group: admissionregistration.k8s.io
+    kind: ValidatingWebhookConfiguration
+    name: policy.sigstore.dev
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
   syncPolicy:
     automated:
       prune: true
@@ -37,3 +51,4 @@ spec:
     syncOptions:
     - CreateNamespace=true
     - ServerSideApply=true
+    - RespectIgnoreDifferences=true

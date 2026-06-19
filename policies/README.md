@@ -92,6 +92,17 @@ Nếu không dùng ArgoCD CLI:
 kubectl -n argocd annotate application root argocd.argoproj.io/refresh=hard --overwrite
 ```
 
+Nếu app đã sync thành công nhưng vẫn `OutOfSync`, kiểm tra resource nào đang
+drift:
+
+```bash
+kubectl -n argocd describe application policy-controller
+kubectl -n argocd describe application policies
+```
+
+Với Policy Controller, một số field runtime như webhook `caBundle` được controller
+tự quản lý nên ArgoCD app đã cấu hình `ignoreDifferences` cho các field đó.
+
 ## Test admission reject image chưa ký
 
 Manifest dưới đây cố tình dùng image `ghcr.io/2hm1901/w10-api:unsigned-test`.
