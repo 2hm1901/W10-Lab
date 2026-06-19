@@ -488,21 +488,27 @@ kubectl get clusterimagepolicy
 kubectl get ns demo --show-labels
 ```
 
-Namespace `demo` phải có label `policy.sigstore.dev/include=true`; nếu không có
-label này thì policy tồn tại nhưng admission không enforce.
+Policy Controller chỉ enforce namespace có label
+`policy.sigstore.dev/include=true`. Mặc định repo không gắn label này để
+bootstrap EC2 vẫn chạy được với image local `w10-api:local`.
 
 Test image chưa ký phải bị reject:
 
 ```bash
+kubectl label namespace demo policy.sigstore.dev/include=true --overwrite
+
 kubectl -n demo run unsigned-api \
   --image=ghcr.io/2hm1901/w10-api:unsigned-test \
   --restart=Never
+
+kubectl label namespace demo policy.sigstore.dev/include-
 ```
 
 Sau khi workflow `Build and Push Image` chạy thành công, image mới được scan và
-ký. Sync lại API rồi kiểm tra Rollout:
+ký. Khi đó có thể bật label enforce rồi sync lại API:
 
 ```bash
+kubectl label namespace demo policy.sigstore.dev/include=true --overwrite
 argocd app get api --hard-refresh
 argocd app sync api
 kubectl argo rollouts get rollout api -n demo

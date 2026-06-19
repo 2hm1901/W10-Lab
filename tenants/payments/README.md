@@ -34,15 +34,17 @@ Cả `demo` và `payments` đều có label này, nên các luật cũ như cấ
 buộc `resources.limits`, cấm `runAsUser: 0`, cấm `hostNetwork` và cấm replicas
 `> 5` tự áp cho namespace mới mà không cần viết constraint riêng.
 
-Sigstore Policy Controller cũng dùng opt-in label:
+Sigstore Policy Controller cũng dùng opt-in label, nhưng repo không bật mặc
+định cho `payments`:
 
 ```yaml
 policy.sigstore.dev/include: "true"
 ```
 
-Vì vậy workload trong `payments` cũng đi qua admission verify image giống team
-cũ. App mẫu dùng `ghcr.io/2hm1901/w10-api:0.0.1`, là image được workflow
-Trivy/Cosign scan và ký trong Lab 2.2.
+Chỉ gắn label này sau khi image GHCR đã được workflow Trivy/Cosign scan và ký.
+Nếu bật quá sớm, Policy Controller sẽ chặn ReplicaSet mới vì không tìm thấy chữ
+ký hợp lệ. Phần tenant isolation vẫn chứng minh được bằng Gatekeeper, RBAC,
+quota và NetworkPolicy.
 
 ## Vì sao Role/RoleBinding giữ cô lập
 

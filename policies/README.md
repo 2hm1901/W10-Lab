@@ -6,8 +6,9 @@ Lab này chứng minh chuỗi kiểm soát image trước khi chạy trong clust
 2. Trivy scan image và fail pipeline nếu có CVE `HIGH` hoặc `CRITICAL`.
 3. Cosign ký image digest sau khi push lên GHCR.
 4. Sigstore Policy Controller verify chữ ký ở admission.
-5. Namespace `demo` chỉ chạy image `ghcr.io/2hm1901/w10-api` đã được ký bởi
-   workflow `.github/workflows/build-push.yml` trên branch `main`.
+5. Namespace được gắn label `policy.sigstore.dev/include=true` chỉ chạy image
+   `ghcr.io/2hm1901/w10-api` đã được ký bởi workflow
+   `.github/workflows/build-push.yml` trên branch `main`.
 
 ## Thành phần
 
@@ -24,8 +25,8 @@ argocd/apps/policies.yaml
 policies/cluster-image-policy.yaml
   ClusterImagePolicy verify image ghcr.io/2hm1901/w10-api*
 
-app-common/demo-namespace.yaml
-  label policy.sigstore.dev/include=true để admission policy enforce namespace demo
+namespace demo/payments
+  gắn label policy.sigstore.dev/include=true khi muốn bật admission verify
 ```
 
 ## Vì sao dùng Cosign keyless
@@ -76,8 +77,12 @@ Kết quả mong muốn:
 
 - app `policy-controller` Synced/Healthy
 - app `policies` Synced/Healthy
-- namespace `demo` có label `policy.sigstore.dev/include=true`
 - có `ClusterImagePolicy/w10-api-keyless-signature`
+
+Mặc định repo không gắn label `policy.sigstore.dev/include=true` vào namespace
+`demo` hoặc `payments`. Lý do: EC2 bootstrap dùng image local `w10-api:local`,
+và image GHCR chỉ verify được sau khi GitHub Actions đã build/sign thành công.
+Nếu bật label quá sớm, Policy Controller sẽ chặn ReplicaSet mới.
 
 Nếu root app đã có nhưng app mới chưa xuất hiện:
 
@@ -105,6 +110,12 @@ tự quản lý nên ArgoCD app đã cấu hình `ignoreDifferences` cho các fi
 
 ## Test admission reject image chưa ký
 
+Gắn label enforce tạm thời:
+
+```bash
+kubectl label namespace demo policy.sigstore.dev/include=true --overwrite
+```
+
 Manifest dưới đây cố tình dùng image `ghcr.io/2hm1901/w10-api:unsigned-test`.
 Vì image này match policy nhưng không có chữ ký hợp lệ từ workflow, API server
 phải reject.
@@ -124,10 +135,21 @@ Dọn object test nếu nó được tạo:
 kubectl -n demo delete pod unsigned-api --ignore-not-found
 ```
 
+Nếu bạn chưa có image API đã ký và muốn app `api` tiếp tục chạy bằng image local,
+gỡ label sau khi test:
+
+```bash
+kubectl label namespace demo policy.sigstore.dev/include-
+```
+
 ## Test image đã ký được chạy
 
 Sau khi GitHub Actions build/sign thành công và commit update
-`app-api/rollout.yaml`, sync app API:
+`app-api/rollout.yaml`, bật label enforce rồi sync app API:
+
+```bash
+kubectl label namespace demo policy.sigstore.dev/include=true --overwrite
+```
 
 ```bash
 argocd app get api --hard-refresh
